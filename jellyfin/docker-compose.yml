@@ -1,0 +1,30 @@
+name: jellyfin
+
+services:
+  jellyfin:
+    container_name: jellyfin
+    image: jellyfin/jellyfin:latest
+    user: "${PUID:-1000}:${PGID:-1000}"
+    restart: always
+    ports:
+      - "8096:8096"       # HTTP
+      # - "8920:8920"     # HTTPS: innecesario, el TLS lo pone Cloudflare/Tailscale
+      # - "7359:7359/udp" # autodescubrimiento en LAN por clientes Jellyfin
+      # - "1900:1900/udp" # DLNA
+    environment:
+      - TZ=${TZ:-Europe/Madrid}
+      # URL pública, se rellena en la fase 9:
+      # - JELLYFIN_PublishedServerUrl=https://video.tudominio.com
+    volumes:
+      # config y cache: ext4 LOCAL (SQLite + miniaturas). Nunca en el NAS.
+      - /var/lib/mediastack/jellyfin/config:/config
+      - /var/lib/mediastack/jellyfin/cache:/cache
+      # Biblioteca de vídeo en el NAS, solo lectura.
+      - /mnt/nas/video:/media:ro
+
+    # FASE 8 (opcional, experimental) — Intel QuickSync a través de WSL2:
+    # no se toca este fichero, se usa el override
+    # docker-compose.hwaccel-wsl.yml.example (renombrar a
+    # docker-compose.override.yml). Immich publica config oficial para WSL;
+    # Jellyfin NO. Puede funcionar o no según iGPU y driver: probar solo con el
+    # stack ya estable y revertir sin drama si el transcode falla.

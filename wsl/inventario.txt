@@ -1,0 +1,36 @@
+﻿INVENTARIO MINI PC - 2026-08-24 14:34
+Equipo: DESKTOP-BNDRMFU
+
+== Windows ==
+Version   : Microsoft Windows 11 Pro (build 26100)
+Resultado : Windows 11 - OK para WSL2
+
+== CPU ==
+Modelo    : lntel(R) N150 @ 1.8GHz
+Nucleos   : 2 fisicos / 4 logicos
+Virtualiz.: habilitada en BIOS, hipervisor aun no activo - OK
+
+== Memoria ==
+RAM total : 7,9 GB
+RAM libre : 2,6 GB ahora mismo
+Resultado : ATENCION - se esperaban 16 GB. Revisar antes de seguir
+Sugerido para .wslconfig : memory=6GB  processors=2
+
+== Discos ==
+C:     84,7 GB libres de   118,3 GB   (NTFS)
+Resultado : OK (84.7 GB libres en C:)
+Disco fisico: SSD 128GB - SSD - 119 GB
+
+== Grafica (para la fase 8, opcional) ==
+Intel(R) HD Graphics 620  |  driver 31.0.101.2111
+
+== Estado de WSL ==
+wsl.exe existe pero no responde: WSL aun no esta instalado del todo
+
+== Red y NAS ==
+IP local  : 192.168.1.227  (Wi-Fi 2)
+NAS 192.168.1.205 : responde al ping - OK
+
+== Resumen ==
+Guarda este fichero y pasamelo para revisar la fase 0 antes de instalar nada.
+

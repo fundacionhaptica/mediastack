@@ -1,0 +1,65 @@
+# Immich — capa propia sobre el docker-compose.yml OFICIAL
+#
+# El docker-compose.yml de Immich NO se edita nunca: se descarga tal cual de la release
+# y se actualiza con cada versión. Todo lo nuestro vive aquí.
+#
+#   cd ~/mediastack/immich
+#   wget -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+#   docker compose up -d          # compose fusiona automáticamente este override
+#
+# Comprobar la fusión antes de arrancar:  docker compose config
+
+services:
+  immich-server:
+    environment:
+      - TZ=${TZ}
+    volumes:
+      # Biblioteca externa: el histórico de fotos que YA está en el NAS.
+      # :ro es deliberado — Immich no podrá borrar ni modificar nada de ahí.
+      # La ruta interna /mnt/nas/fotos-historico es la que se pega en la UI de Immich
+      # al crear la external library (Administración → Bibliotecas externas).
+      - ${EXTERNAL_LIBRARY}:/mnt/nas/fotos-historico:ro
+    # Techo de memoria: en un equipo de 8 GB, un pico del servidor no puede
+    # llevarse por delante a Postgres.
+    mem_limit: 1500m
+
+  database:
+    mem_limit: 800m
+
+  redis:
+    mem_limit: 200m
+
+  # ---------------------------------------------------------------------------
+  # MACHINE LEARNING — APAGADO POR DEFECTO
+  #
+  # Este equipo tiene 7,9 GB y Windows encima. Immich pide 6 GB mínimo y 8 GB
+  # recomendado; el reconocimiento de caras y la búsqueda por contenido son
+  # justo la parte que más RAM consume, y no cabe en horario normal.
+  #
+  # El perfil "ml" hace que este contenedor NO arranque con `docker compose up -d`.
+  # Para lanzarlo puntualmente (de noche, con el PC libre):
+  #
+  #     bash ~/mediastack/scripts/ml.sh on      # arranca ML
+  #     bash ~/mediastack/scripts/ml.sh off     # lo para
+  #
+  # Y en la web, Administración → Ajustes → Machine Learning: activar solo
+  # mientras esté arrancado. Ver "Anexo ML" en PASOS.md.
+  # ---------------------------------------------------------------------------
+  immich-machine-learning:
+    profiles: ["ml"]
+    mem_limit: 2500m
+    environment:
+      # Un solo hilo de inferencia: más lento, pero no ahoga los 4 hilos del N150
+      - MACHINE_LEARNING_WORKERS=1
+      - MACHINE_LEARNING_WORKER_TIMEOUT=300
+
+  # ---------------------------------------------------------------------------
+  # FASE 8 (opcional) — aceleración por hardware en WSL2.
+  # No descomentar hasta que el stack funcione en CPU y esté verificado.
+  # Requiere los ficheros hwaccel.*.yml de la misma release en esta carpeta.
+  # ---------------------------------------------------------------------------
+  #
+  # immich-server:
+  #   extends:
+  #     file: hwaccel.transcoding.yml
+  #     service: vaapi-wsl

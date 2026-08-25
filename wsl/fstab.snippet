@@ -1,0 +1,22 @@
+# Añadir al final de /etc/fstab DENTRO de Ubuntu (sudo nano /etc/fstab).
+# Ajustar las rutas del NAS a las reales tras el inventario de la fase 0.
+#
+# x-systemd.automount  → monta bajo demanda, no bloquea el arranque si el NAS tarda
+# _netdev              → systemd espera a que haya red
+# nofail               → si el NAS no responde, WSL arranca igual (los contenedores
+#                        fallarán, pero el sistema es accesible para arreglarlo)
+# soft,timeo=150       → una caída del NAS da error en 15s en vez de colgar procesos
+
+# ---------- VARIANTE A: NFS (recomendada) ----------
+192.168.1.205:/volume1/foto          /mnt/nas/fotos            nfs  rw,vers=4.1,soft,timeo=150,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+192.168.1.205:/volume1/foto-historico /mnt/nas/fotos-historico nfs  ro,vers=4.1,soft,timeo=150,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+192.168.1.205:/volume1/music         /mnt/nas/musica           nfs  ro,vers=4.1,soft,timeo=150,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+192.168.1.205:/volume1/video         /mnt/nas/video            nfs  ro,vers=4.1,soft,timeo=150,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+
+# ---------- VARIANTE B: CIFS/SMB (plan B si NFS da problemas de permisos) ----------
+# Requiere: sudo apt install cifs-utils
+# y un fichero /root/.smbcred con  username=...  password=...  (chmod 600)
+#
+# //192.168.1.205/foto      /mnt/nas/fotos            cifs  credentials=/root/.smbcred,uid=1000,gid=1000,file_mode=0664,dir_mode=0775,vers=3.1.1,nofail,x-systemd.automount,_netdev  0  0
+# //192.168.1.205/music     /mnt/nas/musica           cifs  credentials=/root/.smbcred,uid=1000,gid=1000,ro,vers=3.1.1,nofail,x-systemd.automount,_netdev  0  0
+# //192.168.1.205/video     /mnt/nas/video            cifs  credentials=/root/.smbcred,uid=1000,gid=1000,ro,vers=3.1.1,nofail,x-systemd.automount,_netdev  0  0

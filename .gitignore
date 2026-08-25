@@ -1,0 +1,22 @@
+# Secretos — NUNCA al repo
+.env
+**/.env
+*.env
+!*.env.example
+!.env.example
+.smbcred
+*credentials*
+*.token
+
+# Ficheros oficiales que se descargan de la release de Immich (no se versionan editados)
+immich/docker-compose.yml
+immich/hwaccel.transcoding.yml
+immich/hwaccel.ml.yml
+
+# Overrides activos generados a partir de los .example
+jellyfin/docker-compose.override.yml
+
+# Datos y basura
+*.log
+*.sql.gz
+.DS_Store

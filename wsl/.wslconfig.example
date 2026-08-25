@@ -1,0 +1,26 @@
+# Copiar a C:\Users\Admin\.wslconfig  (en Windows, NO dentro de WSL)
+# Aplicar con:  wsl --shutdown   (y volver a entrar)
+#
+# Valores calculados para ESTE equipo: Intel N150, 4 hilos, 7,9 GB de RAM.
+# Sin este fichero WSL2 reclama hasta el 80% de la RAM y Windows empieza a
+# paginar justo cuando Immich está indexando. Con 8 GB no hay colchón.
+
+[wsl2]
+# 5 GB para WSL, ~3 GB para Windows. No subirlo sin haber medido antes
+# cuánta RAM consume Windows en reposo en este equipo.
+memory=5GB
+
+# 3 de los 4 hilos del N150. Deja uno para que Windows respire.
+processors=3
+
+# Aquí el swap NO es un lujo: es lo que evita que el OOM killer mate Postgres
+# en un pico de memoria. Va al SSD, que tiene sitio de sobra.
+swap=6GB
+
+[experimental]
+# Devuelve al host la RAM que WSL deja de usar (si no, se queda "pegada" tras
+# un indexado grande de Immich).
+autoMemoryReclaim=gradual
+# El disco virtual devuelve al SSD el espacio que libera. Importante con solo
+# 128 GB de disco: si no, el .vhdx crece y no baja nunca.
+sparseVhd=true

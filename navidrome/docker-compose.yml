@@ -1,0 +1,32 @@
+name: navidrome
+
+services:
+  navidrome:
+    container_name: navidrome
+    image: deluan/navidrome:latest
+    # UID:GID del usuario de WSL. Debe poder leer /mnt/nas/musica y escribir en /data.
+    # Comprobar con:  id -u ; id -g
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "4533:4533"
+    restart: always
+    environment:
+      ND_LOGLEVEL: info
+      # La música está en el NAS: nada de vigilancia continua del sistema de ficheros
+      # sobre NFS (genera tráfico constante y no es fiable). Escaneo programado:
+      ND_SCANSCHEDULE: "0 4 * * *"      # todos los días a las 4:00
+      ND_ENABLEWATCHER: "false"
+      ND_SESSIONTIMEOUT: 24h
+      # Descarga de portadas/artistas: dejar en false hasta tener el stack estable.
+      ND_LASTFM_ENABLED: "false"
+    volumes:
+      # SQLite de Navidrome: ext4 LOCAL. Sobre NFS/CIFS el bloqueo de ficheros
+      # no es fiable y la base de datos acaba corrupta.
+      - /var/lib/mediastack/navidrome/data:/data
+      # Biblioteca musical en el NAS, solo lectura.
+      - /mnt/nas/musica:/music:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4533/ping"]
+      interval: 1m
+      timeout: 10s
+      retries: 3

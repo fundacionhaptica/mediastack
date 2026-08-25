@@ -1,0 +1,47 @@
+name: cloudflared
+
+# FASE 9. No levantar hasta que el stack esté verificado en LAN.
+#
+# IMPORTANTE — leer PLAN.md §6 antes:
+#  · Cloudflare Free corta peticiones de más de 100 MB → la copia automática de
+#    VÍDEOS desde el móvil a Immich FALLARÁ por el túnel. Para eso, Tailscale.
+#  · Servir streaming de vídeo por el proxy gratuito es zona gris de los términos
+#    de Cloudflare. Jellyfin, mejor por Tailscale.
+#  · Este cloudflared es del mini PC y es INDEPENDIENTE del túnel del NAS.
+#    No se toca la configuración del túnel de MaJaNAS.
+#
+# El token sale de: Cloudflare Zero Trust → Networks → Tunnels → Create tunnel
+# (tunnel gestionado desde el panel: las rutas se configuran en la web, no aquí).
+
+services:
+  cloudflared:
+    container_name: cloudflared-mediastack
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    network_mode: host   # para poder apuntar a localhost:2283 / 4533 / 8096
+
+# ---------------------------------------------------------------------------
+# NOMBRES DEFINITIVOS
+#
+# Public hostnames en el panel de Cloudflare (Zero Trust → Networks → Tunnels):
+#   fotos.ruizespana.com    -> http://localhost:2283    (Immich, web)
+#   musica.ruizespana.com   -> http://localhost:4533    (Navidrome)
+#
+# Estos DOS van por el túnel. Los siguientes NO: se crean como registros DNS
+# normales en la zona ruizespana.com, en modo "solo DNS" (nube GRIS), apuntando
+# a la IP de Tailscale del mini PC (100.x.y.z):
+#
+#   videos.ruizespana.com     -> A 100.x.y.z   (Jellyfin :8096)
+#   fotos-vpn.ruizespana.com  -> A 100.x.y.z   (Immich, la URL de la app móvil)
+#
+# Motivo: por el túnel gratuito los vídeos de más de 100 MB fallan al subir, y
+# servir streaming pesado por el proxy es zona gris de los términos. La IP de
+# Tailscale no es enrutable en Internet, así que esos dos nombres solo funcionan
+# desde tus dispositivos del tailnet: acceso privado con nombre comodo.
+#
+# Y en Zero Trust → Access → Applications, protege fotos.* y musica.* con una
+# politica de email allowlist si no quieres que dependan solo de su login.
+# ---------------------------------------------------------------------------

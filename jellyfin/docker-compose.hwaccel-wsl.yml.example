@@ -1,0 +1,21 @@
+# FASE 8 (opcional, experimental) — Intel QuickSync / VAAPI dentro de WSL2.
+#
+# Uso:  cp docker-compose.hwaccel-wsl.yml.example docker-compose.override.yml
+#       docker compose up -d
+#
+# Después, en Jellyfin: Panel → Reproducción → Aceleración por hardware → VAAPI,
+# dispositivo /dev/dri/renderD128.
+#
+# Si el transcode falla o la reproducción se queda en negro:
+#       rm docker-compose.override.yml && docker compose up -d
+# y se vuelve a CPU sin consecuencias.
+
+services:
+  jellyfin:
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/dxg:/dev/dxg
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl
+    environment:
+      - LIBVA_DRIVER_NAME=d3d12

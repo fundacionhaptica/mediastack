@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\\\wsl\\\\00-inventario.ps1)"
+    ]
+  }
+}
