@@ -1,4 +1,4 @@
-# HANDOFF — estado del despliegue a 2026-08-25
+# HANDOFF — estado del despliegue a 2026-08-27
 
 Documento de traspaso: lo que está hecho, lo que está bloqueado y el siguiente comando
 exacto. Quien retome esto no necesita el historial de ninguna conversación previa.
@@ -15,11 +15,12 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 0 Inventario | ✅ | `wsl/inventario.txt` |
 | 1 WSL2 + Ubuntu | ✅ 0 fallos | WSL 2.7.12, Ubuntu-24.04, systemd `running`, usuario `jaime` |
 | 2 Docker | ✅ | Engine 29.7.2 + compose v5.5.0, `enabled` y `active`, driver `overlayfs` |
-| 3 Montajes NAS | ⛔ bloqueada | NFS apagado en el NAS (ver abajo) |
-| 4 Repo en git | ⚠️ parcial | repo local creado; falta el remoto en GitHub |
-| 5 Immich | ⏸ preparada | ficheros y `.env` listos; **sin arrancar**, depende de la fase 3 |
-| 6 Arranque automático | ⏳ | pendiente; necesita PowerShell elevado |
-| 7 Navidrome/Jellyfin | ⏸ preparada | `.env` listos; **sin arrancar**, dependen de la fase 3 |
+| 3 Montajes NAS | ⛔ bloqueada | NFS sigue apagado en el NAS (ver abajo) |
+| 4 Repo en git | ✅ | GitHub `fundacionhaptica/mediastack`, al día con `main` |
+| 5 Immich | ⏸ preparada | ficheros, `.env` e **imágenes ya descargadas**; depende de la fase 3 |
+| 6 Arranque automático | ⏸ preparada | script listo; falta ejecutarlo en PowerShell elevado |
+| 7 Navidrome/Jellyfin | ⏸ preparada | `.env` e **imágenes ya descargadas**; dependen de la fase 3 |
+| 9 Acceso desde fuera | ⚠️ | túnel ya creado en Cloudflare; ver la advertencia sobre Jellyfin |
 
 Configuración que ya está puesta:
 
@@ -34,52 +35,80 @@ Configuración que ya está puesta:
   3 servicios (`database`, `redis`, `immich-server`), Postgres en
   `/var/lib/mediastack/immich/postgres`, biblioteca externa en `/mnt/nas/fotos-historico`.
 - `~/mediastack/{navidrome,jellyfin}/.env` con `PUID=1000`, `PGID=1000`, `TZ=Europe/Madrid`.
-- `/mnt/nas/{fotos,fotos-historico,musica,video,backups}` creados y **vacíos**, `nfs-common`
-  instalado.
+- `/mnt/nas/{fotos,fotos-historico,musica,video,backups}` creados y **vacíos**.
+- Paquetes instalados en Ubuntu: `nfs-common`, `cifs-utils`, `smbclient` (los dos últimos
+  para poder tirar por el plan B sin esperas).
+- **Imágenes Docker ya descargadas** (~6,9 GB): `immich-server:v3`, `immich-app/postgres`,
+  `valkey/valkey:9`, `deluan/navidrome`, `jellyfin/jellyfin`. Al desbloquear la fase 3, los
+  `docker compose up -d` arrancan sin descargar nada.
+- Git: `C:\claude\mediastack` tiene el remoto `github`; `~/mediastack` tiene `origin` →
+  GitHub y `windows` → `/mnt/c/claude/mediastack`. El flujo es: **editar en
+  `C:\claude\mediastack` → commit → push a github → `git -C ~/mediastack pull`**.
 
 ---
 
-## Bloqueos (los dos son de Jaime, no se pueden automatizar desde aquí)
+## Bloqueo real que queda: NFS apagado en el NAS → fases 3, 5 y 7
 
-### 1. NFS apagado en el NAS → bloquea las fases 3, 5 y 7
+Comprobado desde WSL el 2026-08-27: el NAS responde al ping, **445 (SMB) abierto**, pero
+**2049 y 111 cerrados** y `showmount -e 192.168.1.205` da `clnt_create: RPC: Unable to
+receive`. Exactamente igual que hace dos días.
 
-Comprobado desde WSL: el NAS responde al ping, **445 (SMB) abierto**, pero **2049 y 111
-cerrados** y `showmount -e 192.168.1.205` da `clnt_create: RPC: Unable to receive`.
+**Opción A (la del plan, recomendada).** En DSM: *Panel de control → Servicios de archivos →
+NFS → Habilitar*, máximo **NFSv4.1**, y los permisos NFS por carpeta que detalla `PASOS.md`
+fase 3 (solo lectura para música, vídeo e histórico; lectura/escritura solo para la carpeta de
+subidas de Immich).
 
-En DSM: *Panel de control → Servicios de archivos → NFS → Habilitar*, máximo **NFSv4.1**, y
-los permisos NFS por carpeta que detalla `PASOS.md` fase 3 (solo lectura para música, vídeo e
-histórico; lectura/escritura solo para la carpeta de subidas de Immich).
+**Opción B (plan B, ya preparado).** SMB está abierto: se puede montar por CIFS con la
+variante B de `wsl/fstab.snippet`. Rinde peor con muchos ficheros pequeños, pero desbloquea
+todo hoy mismo. Hace falta usuario y contraseña de un usuario del NAS.
 
-Al volver, lo primero:
+Al volver, lo primero — como root:
 
 ```bash
-wsl -d Ubuntu-24.04 -- showmount -e 192.168.1.205
+wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/montar-nas.sh diagnostico
 ```
 
-Si responde, seguir por la sección "En WSL" de la fase 3.
+### Pendiente de dato: los nombres reales de las carpetas compartidas
 
-### 2. `jaime` no tiene contraseña → `sudo` no funciona
+`wsl/fstab.snippet` asume `/volume1/foto`, `/volume1/foto-historico`, `/volume1/music`,
+`/volume1/video`, pero **eso no está verificado** — la fase 0 no llegó a inventariar el NAS.
+Se resuelve en un comando:
 
-La cuenta se creó con `--disabled-password` (la distro se instaló con `--no-launch`, sin el
-asistente). Arreglo, una vez:
+```bash
+wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/montar-nas.sh listar-smb <usuario-del-NAS>
+```
+
+---
+
+## Ya no es un bloqueo: `sudo` sin contraseña
+
+`jaime` se creó con `--disabled-password`, así que `sudo` desde dentro pide una contraseña que
+no existe. **Se puede escalar sin arreglarlo**, incluso desde una sesión de WSL, porque el
+interop de Windows funciona:
+
+```bash
+/mnt/c/Windows/System32/wsl.exe -d Ubuntu-24.04 -u root -- <comando>   # → uid=0
+```
+
+Aun así conviene ponerle contraseña alguna vez:
 
 ```powershell
 wsl -d Ubuntu-24.04 -u root passwd jaime
 ```
-
-Mientras tanto, lo que necesita root se hace con `wsl -d Ubuntu-24.04 -u root -- ...`.
 
 ---
 
 ## Siguiente paso una vez desbloqueado
 
 ```bash
-# FASE 3 — montar a mano ANTES de tocar /etc/fstab
-sudo mount -t nfs -o vers=4.1,soft,timeo=150 192.168.1.205:/volume1/foto /mnt/nas/fotos-historico
-ls /mnt/nas/fotos-historico | head
-# si se lee: desmontar, poner wsl/fstab.snippet en /etc/fstab, systemctl daemon-reload && mount -a
+# FASE 3 — probar a mano ANTES de tocar /etc/fstab (el script monta, enseña y desmonta)
+wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/montar-nas.sh probar-nfs /volume1/foto
+#   o, por el plan B:
+wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/montar-nas.sh probar-cifs foto jaime
+# si se lee: poner la variante que toque de wsl/fstab.snippet en /etc/fstab,
+#            systemctl daemon-reload && mount -a
 
-# FASE 5 — Immich (ya está todo preparado, solo falta levantarlo)
+# FASE 5 — Immich (todo preparado e imágenes descargadas)
 cd ~/mediastack/immich && docker compose up -d && docker compose logs -f immich-server
 
 # FASE 7 — el resto
@@ -89,11 +118,42 @@ cd ~/mediastack/jellyfin  && docker compose up -d
 bash ~/mediastack/scripts/verificar.sh   # tiene que salir 0 fallos
 ```
 
-Fase 4, para cerrarla: crear el repo en GitHub y
-`git -C /mnt/c/claude/mediastack remote add github <url> && git push -u github main`.
-Hoy `~/mediastack` clona del repo de Windows (`origin = /mnt/c/claude/mediastack`), así que la
-regla de "editar en el repo y hacer `pull` en el mini PC" ya se cumple: se edita en
-`C:\claude\mediastack`, se commitea, y en WSL `git -C ~/mediastack pull`.
+## Fase 6 — cuando el stack esté en verde
+
+En **PowerShell elevado** en el mini PC (el script comprueba la elevación y aborta si no):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\06-arranque-automatico.ps1
+```
+
+Registra la tarea `MediaStack` (al inicio, como SYSTEM) que llama a
+`scripts/boot-mediastack.sh`: ese espera a dockerd, baja a `jaime` y ejecuta
+`arrancar-stack.sh`, dejando log en `/var/log/mediastack-boot.log`. Faltan además las dos
+piezas manuales: **BIOS → Restore on AC Power Loss = Power On**, y la verificación de verdad,
+que es un reinicio en frío.
+
+---
+
+## Fase 9 — el túnel ya está montado, con una pega
+
+Túnel **MiniPC_Jaime** (Cloudflare Zero Trust, cuenta `synology-maja`):
+
+| Hostname | Servicio | Puerto local |
+|---|---|---|
+| fotos.ruizespana.com | Immich | localhost:2283 |
+| musica.ruizespana.com | Navidrome | localhost:4533 |
+| pelis.ruizespana.com | Jellyfin | localhost:8096 |
+
+⚠️ **`pelis.ruizespana.com` contradice lo decidido en `PLAN.md` §6 y en
+`cloudflared/docker-compose.yml`**: Jellyfin se dejó deliberadamente FUERA del túnel porque
+servir streaming de vídeo por el proxy gratuito de Cloudflare es zona gris de sus términos, y
+porque el límite de 100 MB por petición rompe la subida de vídeos. El plan era publicarlo por
+Tailscale con un registro DNS en nube gris. Decidir: o se quita esa ruta del túnel, o se
+actualiza el plan asumiendo el riesgo a conciencia.
+
+Además, el contenedor `cloudflared` del mini PC **todavía no está levantado** y
+`cloudflared/.env` con `TUNNEL_TOKEN` no existe: hasta que el stack no esté verificado en LAN
+no se levanta (así lo dice el propio compose).
 
 ---
 
@@ -105,18 +165,20 @@ regla de "editar en el repo y hacer `pull` en el mini PC" ya se cumple: se edita
 - **No pasar scripts a `wsl.exe` por argumentos ni por la entrada estándar** desde
   PowerShell 5.1: se come los `$` y las `\` de la línea de comandos aunque vayan entre comillas
   simples (`$(date)`, `awk '$3'`, `s/\r$//`, rutas `C:\...`), y por stdin mete un BOM y remata
-  con CRLF. Escribir un `.sh` en UTF-8 sin BOM y ejecutarlo por su ruta `/mnt/c/...`, como hace
-  `02-configurar-ubuntu.ps1`.
+  con CRLF. Escribir un `.sh` en UTF-8 sin BOM y ejecutarlo por su ruta, como hacen
+  `02-configurar-ubuntu.ps1` y la tarea programada de la fase 6.
 - **`2>&1` sobre un `.exe` en PowerShell 5.1** con `$ErrorActionPreference='Stop'` aborta el
   script por `NativeCommandError` aunque el comando haya ido bien. Usar `2>$null`.
 - El driver de almacenamiento de Docker 29 se llama **`overlayfs`**, no `overlay2`.
 - `docker inspect` de un contenedor inexistente deja un salto de línea en la salida: sin
   limpiarlo, `verificar.sh` reportaba `estado '\nausente'`. Ya corregido.
+- La salida de `wsl.exe` llamado **desde dentro de WSL** viene en UTF-16 con NULs: pasarla por
+  `tr -d '\0'` o no se puede grepear.
 
 ---
 
 ## Estado de `scripts/verificar.sh`
 
-Los fallos que quedan son exactamente los de las fases pendientes: 4 montajes del NAS y 3
-puertos HTTP de contenedores que aún no existen. Entorno WSL, Docker y las reglas de
-almacenamiento (Postgres en ext4 local) salen en verde.
+7 fallos, y son exactamente los de las fases pendientes: 4 montajes del NAS y 3 puertos HTTP de
+contenedores que aún no existen. Entorno WSL, Docker y las reglas de almacenamiento (Postgres
+en ext4 local) salen en verde.
