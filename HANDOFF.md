@@ -20,7 +20,7 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 5 Immich | ⏸ preparada | ficheros, `.env` e **imágenes ya descargadas**; depende de la fase 3 |
 | 6 Arranque automático | ⏸ preparada | script listo; falta ejecutarlo en PowerShell elevado |
 | 7 Navidrome/Jellyfin | ⏸ preparada | `.env` e **imágenes ya descargadas**; dependen de la fase 3 |
-| 9 Acceso desde fuera | ⚠️ | túnel creado; decidido sacar Jellyfin de él y llevarlo a Tailscale |
+| 9 Acceso desde fuera | ⏸ preparada | Tailscale + Caddy + portal escritos; runbook en PASOS.md §9 |
 
 Configuración que ya está puesta:
 
@@ -153,17 +153,30 @@ que ya decía `PLAN.md` §6: servir streaming de vídeo por el proxy gratuito de
 zona gris de sus términos, y el límite de 100 MB por petición rompe la subida de vídeos desde
 la app de Immich. Jellyfin va por Tailscale.
 
-Pendiente, en este orden:
+**Ya está escrito y listo para ejecutar** (runbook completo en `PASOS.md` fase 9):
 
-1. **En el panel de Cloudflare** (lo hace Jaime): Zero Trust → Networks → Tunnels →
-   MiniPC_Jaime → borrar la public hostname `pelis.ruizespana.com`.
-2. **Instalar Tailscale** — no está puesto en ningún sitio: ni en Windows
-   (`C:\Program Files\Tailscale`) ni en Ubuntu. Es prerrequisito de esta ruta.
-3. **Registro DNS «solo DNS» (nube gris)** en la zona `ruizespana.com` apuntando a la IP de
-   Tailscale del mini PC (100.x.y.z), para Jellyfin y para `fotos-vpn` (la URL de la app
-   móvil de Immich, que así esquiva el límite de 100 MB).
-4. Decidir el nombre: `PLAN.md` §6 lo llama `videos.ruizespana.com`; el túnel usaba `pelis.`.
-   Da igual cuál, pero que `PLAN.md` y el DNS digan lo mismo.
+- `wsl/09-tailscale.sh` — instala Tailscale **dentro de Ubuntu**, no en Windows, y explica por
+  qué. Prerrequisitos comprobados el 2026-08-27: `/dev/net/tun`, `ip_forward=1`, systemd
+  `running`.
+- `caddy/` — reverse proxy que escucha **solo en la IP del tailnet** y da HTTPS válido por
+  DNS-01 contra Cloudflare, sin abrir un puerto a Internet. La imagen se compila
+  (`caddy/Dockerfile`) porque la oficial no trae el proveedor DNS de Cloudflare.
+  Sirve `pelis`, `fotos-vpn` y `casa`.
+- `homepage/` — portal de entrada en `casa.ruizespana.com`, con las tres apps y el widget de
+  recursos (útil con el presupuesto de RAM de `PLAN.md` §3).
+- `PLAN.md` §6 actualizado: el nombre pasa a ser `pelis.` (era `videos.`), se añade `casa.`, y
+  se documenta el detalle que rompía la idea — **un registro DNS apunta a una IP, no a un
+  puerto**, de ahí Caddy.
+
+Lo que hace falta de tu parte, en este orden:
+
+1. **Borrar `pelis.ruizespana.com` del túnel** en Zero Trust → Networks → Tunnels →
+   MiniPC_Jaime. Es justo el tráfico que no queremos por el proxy.
+2. Ejecutar `wsl/09-tailscale.sh` y autenticar con `tailscale up --hostname=minipc-jrh`.
+3. Tres registros **A en nube GRIS** (`pelis`, `fotos-vpn`, `casa`) → la IP `100.x.y.z`.
+4. Un **token de API de Cloudflare** acotado a la zona (`Zone:DNS:Edit`) en `caddy/.env`.
+
+Nada de esto se levanta hasta que el stack esté verde en LAN, o sea, hasta el NFS.
 
 Además, el contenedor `cloudflared` del mini PC **todavía no está levantado** y
 `cloudflared/.env` con `TUNNEL_TOKEN` no existe: hasta que el stack no esté verificado en LAN

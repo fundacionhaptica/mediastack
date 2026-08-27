@@ -1,0 +1,34 @@
+# FASE 9 — nombres limpios con HTTPS para los servicios que NO van por el túnel.
+#
+# Qué hace esto y qué no:
+#  · Escucha SOLO en la IP de Tailscale ({$TS_IP}). Nada de esto es alcanzable desde
+#    la LAN ni desde Internet: solo desde tus dispositivos del tailnet.
+#  · Saca certificados de Let's Encrypt por el reto DNS-01 contra Cloudflare. El
+#    dominio es público de verdad, así que el certificado es válido y se renueva solo,
+#    aunque la IP a la que apunta (100.x.y.z) no sea enrutable en Internet.
+#  · NO sustituye al túnel: fotos.ruizespana.com y musica.ruizespana.com siguen
+#    saliendo por cloudflared con proxy naranja, para gente sin Tailscale.
+
+{
+	email {$ACME_EMAIL}
+	acme_dns cloudflare {$CF_API_TOKEN}
+}
+
+# Jellyfin. Fuera del túnel a propósito: ver PLAN.md §6.
+pelis.ruizespana.com {
+	bind {$TS_IP}
+	reverse_proxy localhost:8096
+}
+
+# Immich para la app del móvil. Por aquí NO hay límite de 100 MB por petición,
+# que es lo que rompe la copia automática de vídeos a través del túnel.
+fotos-vpn.ruizespana.com {
+	bind {$TS_IP}
+	reverse_proxy localhost:2283
+}
+
+# Portal de entrada.
+casa.ruizespana.com {
+	bind {$TS_IP}
+	reverse_proxy localhost:3000
+}

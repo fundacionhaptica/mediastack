@@ -193,8 +193,9 @@ detrás de Cloudflare Tunnel funciona técnicamente, pero no es lo que Cloudflar
 |---|---|---|---|
 | `fotos.ruizespana.com` | Immich · 2283 | Cloudflare Tunnel (proxy naranja) | Para compartir álbumes con familia que no va a instalarse nada |
 | `musica.ruizespana.com` | Navidrome · 4533 | Cloudflare Tunnel (proxy naranja) | Audio, ligero, sin problema de límites |
-| `videos.ruizespana.com` | Jellyfin · 8096 | **Registro DNS «solo DNS» (nube gris) → IP Tailscale del mini PC** | Esquiva la zona gris de términos de Cloudflare con vídeo pesado y no mete el streaming por el proxy |
+| `pelis.ruizespana.com` | Jellyfin · 8096 | **Registro DNS «solo DNS» (nube gris) → IP Tailscale del mini PC** | Esquiva la zona gris de términos de Cloudflare con vídeo pesado y no mete el streaming por el proxy |
 | `fotos-vpn.ruizespana.com` | Immich · 2283 | **Solo DNS → IP Tailscale** | Es la URL que se pone en la **app móvil**: sin el límite de 100 MB, los vídeos suben |
+| `casa.ruizespana.com` | Homepage · 3000 | **Solo DNS → IP Tailscale** | Portal de entrada con las tres apps y el estado del equipo |
 
 Los cuatro nombres funcionan y son cómodos de recordar. La diferencia está en si el tráfico pasa
 o no por el proxy de Cloudflare:
@@ -208,9 +209,32 @@ o no por el proxy de Cloudflare:
 | Uso | Vía |
 |---|---|
 | Copia de seguridad del móvil (Immich) | `fotos-vpn.ruizespana.com` → **Tailscale** |
-| Ver Jellyfin fuera de casa | `videos.ruizespana.com` → **Tailscale** |
+| Ver Jellyfin fuera de casa | `pelis.ruizespana.com` → **Tailscale** |
 | Compartir un álbum con familia sin instalarles nada | `fotos.ruizespana.com` → **Cloudflare Tunnel** |
 | Escuchar música fuera de casa | `musica.ruizespana.com` → **Cloudflare Tunnel** |
+
+### Un registro DNS apunta a una IP, no a un puerto
+
+Detalle que rompe la idea si se pasa por alto: `pelis.ruizespana.com → 100.x.y.z` hace que el
+nombre resuelva, pero el navegador va al **443**, no al **8096**. Tal cual, lo que queda es
+`pelis.ruizespana.com:8096`, sin HTTPS.
+
+Por eso los nombres de Tailscale pasan por un **reverse proxy propio, Caddy** (`caddy/`), que
+escucha **solo en la IP del tailnet** y reparte a `localhost:8096 / 2283 / 3000`. Los
+certificados los saca de Let's Encrypt por el reto **DNS-01 contra Cloudflare**: como
+`ruizespana.com` es un dominio público de verdad, el certificado es válido y se renueva solo
+**sin abrir un solo puerto a Internet**. La imagen de Caddy se compila (`caddy/Dockerfile`)
+porque la oficial no trae el proveedor DNS de Cloudflare.
+
+Consecuencia de diseño: **Tailscale va dentro de Ubuntu/WSL, no en Windows**. Si `tailscaled`
+corriera en Windows, la IP del tailnet sería de Windows y los contenedores están en WSL: el
+tráfico llegaría a la IP de Windows, no a `localhost`, el reenvío automático de WSL2 no
+serviría y haría falta `netsh portproxy` — una pieza más que se rompe sola con cada
+actualización de WSL. La contrapartida es que WSL tiene que estar arrancada, que es justo lo
+que garantiza la tarea programada de la fase 6.
+
+Coste en RAM: Caddy ~128 MB y Homepage ~256 MB de techo, sobre los ~3,5 GB de los 5 que ya
+gastaba el stack (§3). Sigue quedando margen.
 
 Cloudflare Tunnel entra en **fase 9**, cuando todo lo demás esté verificado. La infraestructura
 de túnel ya existente en el NAS no se toca: el mini PC monta su **propio `cloudflared`** en

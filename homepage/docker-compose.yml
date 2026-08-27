@@ -1,0 +1,29 @@
+name: homepage
+
+# FASE 9 — portal de entrada. Solo enlaces y estado; no toca datos de nadie.
+# Se publica como casa.ruizespana.com a través de Caddy, por Tailscale.
+#
+# No levantar hasta que el stack esté verificado en LAN.
+
+services:
+  homepage:
+    container_name: homepage
+    image: ghcr.io/gethomepage/homepage:latest
+    restart: always
+    ports:
+      # Solo en localhost: quien lo publica es Caddy, que está en network_mode host.
+      # Si esto fuera 3000:3000 a secas, el portal quedaría abierto a toda la LAN.
+      - "127.0.0.1:3000:3000"
+    env_file: .env
+    environment:
+      # Desde la v1.0 Homepage rechaza las peticiones cuyo Host no esté en esta lista.
+      # Sin esto, casa.ruizespana.com da un error de host no permitido.
+      - HOMEPAGE_ALLOWED_HOSTS=casa.ruizespana.com,localhost:3000
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Madrid
+    volumes:
+      - ./config:/app/config
+      # Solo lectura: el widget de Docker lista contenedores, no los maneja.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    mem_limit: 256m

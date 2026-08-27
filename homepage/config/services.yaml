@@ -1,0 +1,32 @@
+# Las URL son las de Tailscale y las del túnel. Cada tarjeta lleva la que toca
+# según desde dónde se vaya a usar; ver PLAN.md §6.
+
+- Multimedia:
+    - Immich:
+        icon: immich.png
+        href: https://fotos-vpn.ruizespana.com
+        description: Fotos — por Tailscale, sin límite de subida
+        siteMonitor: http://localhost:2283
+        widget:
+          type: immich
+          url: http://localhost:2283
+          key: {{HOMEPAGE_VAR_IMMICH_KEY}}
+          version: 2
+
+    - Navidrome:
+        icon: navidrome.png
+        href: https://musica.ruizespana.com
+        description: Música — sale por el túnel
+        siteMonitor: http://localhost:4533
+
+    - Jellyfin:
+        icon: jellyfin.png
+        href: https://pelis.ruizespana.com
+        description: Vídeo — solo por Tailscale
+        siteMonitor: http://localhost:8096
+
+- Sistema:
+    - Immich compartido:
+        icon: cloudflare.png
+        href: https://fotos.ruizespana.com
+        description: La URL para la familia, sin instalar nada

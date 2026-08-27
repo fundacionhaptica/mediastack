@@ -1,0 +1,13 @@
+- Administración:
+    - Immich admin:
+        - abbr: IA
+          href: https://fotos-vpn.ruizespana.com/admin
+    - Jellyfin panel:
+        - abbr: JF
+          href: https://pelis.ruizespana.com/web/index.html#!/dashboard
+    - Cloudflare Zero Trust:
+        - abbr: CF
+          href: https://one.dash.cloudflare.com/
+    - Tailscale:
+        - abbr: TS
+          href: https://login.tailscale.com/admin/machines

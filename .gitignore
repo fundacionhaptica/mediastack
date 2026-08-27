@@ -20,3 +20,10 @@ jellyfin/docker-compose.override.yml
 *.log
 *.sql.gz
 .DS_Store
+
+# Homepage crea ficheros por defecto y logs dentro de su config
+homepage/config/logs/
+homepage/config/docker.yaml
+homepage/config/kubernetes.yaml
+homepage/config/custom.css
+homepage/config/custom.js

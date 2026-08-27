@@ -1,0 +1,22 @@
+name: caddy
+
+# FASE 9. No levantar hasta que el stack esté verificado en LAN y Tailscale
+# autenticado (wsl/09-tailscale.sh).
+#
+# network_mode: host para poder hablar con localhost:8096 / 2283 / 3000 y para
+# poder escuchar en la IP del tailnet, que vive en el host, no en una red bridge.
+
+services:
+  caddy:
+    container_name: caddy
+    build: .
+    restart: always
+    network_mode: host
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificados y estado de ACME. ext4 local: si esto se pierde, Caddy vuelve
+      # a pedir certificados y puede topar con el límite de emisión de Let's Encrypt.
+      - /var/lib/mediastack/caddy/data:/data
+      - /var/lib/mediastack/caddy/config:/config
+    mem_limit: 128m

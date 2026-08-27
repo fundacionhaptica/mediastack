@@ -1,0 +1,18 @@
+- resources:
+    # En un equipo de 7,9 GB con un presupuesto de RAM tan justo (PLAN.md §3),
+    # esto no es decoración: es el primer sitio donde se ve que algo se desmadra.
+    cpu: true
+    memory: true
+    disk: /
+    expanded: true
+
+- search:
+    provider: duckduckgo
+    target: _blank
+
+- datetime:
+    text_size: xl
+    format:
+      timeStyle: short
+      dateStyle: long
+      hourCycle: h23

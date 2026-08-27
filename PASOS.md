@@ -368,25 +368,74 @@ navegación va lenta de verdad.
 |---|---|---|
 | `fotos.ruizespana.com` | Immich :2283 | Túnel, **proxy naranja** |
 | `musica.ruizespana.com` | Navidrome :4533 | Túnel, **proxy naranja** |
-| `videos.ruizespana.com` | Jellyfin :8096 | Registro A **solo DNS (gris)** → IP Tailscale |
+| `pelis.ruizespana.com` | Jellyfin :8096 | Registro A **solo DNS (gris)** → IP Tailscale |
 | `fotos-vpn.ruizespana.com` | Immich :2283 | Registro A **solo DNS (gris)** → IP Tailscale |
+| `casa.ruizespana.com` | Homepage :3000 | Registro A **solo DNS (gris)** → IP Tailscale |
 
-**Orden recomendado:**
+Los tres últimos no llegan al servicio directamente: pasan por **Caddy** (`caddy/`), que
+escucha solo en la IP del tailnet y da HTTPS con certificado válido. Sin Caddy tendrías que
+escribir el puerto a mano (`pelis.ruizespana.com:8096`) y sin cifrar. Ver `PLAN.md` §6.
 
-1. **Tailscale primero** (`curl -fsSL https://tailscale.com/install.sh | sh` en WSL, o el
-   cliente de Windows). Anota la IP `100.x.y.z` que asigna al mini PC: es la que va en los dos
-   registros grises.
-2. **Registros DNS grises** para `videos` y `fotos-vpn` en la zona `ruizespana.com`.
-   En la app móvil de Immich se configura `https://fotos-vpn.ruizespana.com:2283` — así los
-   vídeos grandes suben sin chocar con el límite de 100 MB.
-3. **Cloudflare Tunnel** para `fotos` y `musica`. `cloudflared/docker-compose.yml` está listo;
-   leer los avisos de cabecera y `PLAN.md` §6 antes.
+### 9.1 — Tailscale, dentro de WSL
+
+```bash
+$ wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/wsl/09-tailscale.sh
+# el script deja tailscaled instalado y activo; luego, autenticar:
+$ sudo tailscale up --hostname=minipc-jrh     # imprime una URL: abrirla en el navegador
+$ tailscale ip -4                             # → 100.x.y.z, la IP que va en todo lo demás
+```
+
+### 9.2 — Registros DNS grises
+
+En la zona `ruizespana.com`, tres registros **A** en modo **solo DNS (nube GRIS)** apuntando a
+esa `100.x.y.z`: `pelis`, `fotos-vpn` y `casa`. En naranja no funcionarían: Cloudflare no
+puede alcanzar una IP del rango 100.64.0.0/10.
+
+### 9.3 — Token de Cloudflare para los certificados
+
+Cloudflare → My Profile → API Tokens → *Create Token* → plantilla **Edit zone DNS**, acotada a
+la zona `ruizespana.com` (permiso `Zone:DNS:Edit`). Es lo único que Caddy necesita para el
+reto DNS-01; no publica nada.
+
+```bash
+$ cd ~/mediastack/caddy && cp .env.example .env && chmod 600 .env
+# rellenar TS_IP, CF_API_TOKEN y ACME_EMAIL
+```
+
+### 9.4 — Levantar Caddy y el portal
+
+```bash
+$ sudo mkdir -p /var/lib/mediastack/caddy/{data,config}
+$ sudo chown -R 1000:1000 /var/lib/mediastack/caddy
+
+$ cd ~/mediastack/homepage && cp .env.example .env && chmod 600 .env && docker compose up -d
+$ cd ~/mediastack/caddy && docker compose up -d --build   # la primera vez compila Caddy
+$ docker compose logs -f caddy                            # ver la emisión de certificados
+```
+
+### 9.5 — El túnel, para lo que sí va por Cloudflare
+
+`cloudflared/docker-compose.yml` está listo. Leer sus avisos de cabecera y `PLAN.md` §6 antes.
+En el panel del túnel **MiniPC_Jaime** deben quedar solo `fotos` y `musica`: si sigue estando
+`pelis.ruizespana.com`, **borrarla** — ese es justo el tráfico que no queremos por el proxy.
 
 **VERIFICACIÓN 9:**
 
-- [ ] Desde datos móviles (**Wi-Fi apagado**): la app de Immich sube una **foto**.
-- [ ] Desde datos móviles: la app de Immich sube un **vídeo de más de 100 MB**.
-      Si va por Cloudflare, esto **fallará** — es el comportamiento esperado, no un bug tuyo.
+```bash
+$ tailscale status | head                       # el mini PC aparece como minipc-jrh
+$ curl -sI https://pelis.ruizespana.com | head -1   # desde otro equipo DEL tailnet
+```
+
+- [ ] `https://casa.ruizespana.com` abre el portal, con **candado válido** (no aviso de
+      certificado): eso demuestra que el DNS-01 funcionó.
+- [ ] `https://pelis.ruizespana.com` abre Jellyfin **sin puerto en la URL**.
+- [ ] Desde un equipo **fuera del tailnet**, esos tres nombres **no responden**. Si responden,
+      Caddy no está atado a `TS_IP` y los servicios están expuestos: pararlo y revisar.
+- [ ] Desde datos móviles (**Wi-Fi apagado**), con Tailscale activo en el móvil: la app de
+      Immich apuntando a `https://fotos-vpn.ruizespana.com` sube una **foto**.
+- [ ] Y sube un **vídeo de más de 100 MB**. Por Tailscale debe funcionar; por el túnel
+      **fallaría** — es el comportamiento esperado, no un bug tuyo.
+- [ ] En el panel del túnel ya **no** está `pelis.ruizespana.com`.
 - [ ] El túnel del NAS (n8n, flota, erp, mcp) sigue funcionando igual: **no se ha tocado**.
 
 ---

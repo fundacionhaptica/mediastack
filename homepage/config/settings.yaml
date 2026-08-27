@@ -1,0 +1,16 @@
+title: Casa
+description: Fotos, música y vídeo de Jaime
+startUrl: https://casa.ruizespana.com
+
+theme: dark
+color: slate
+headerStyle: boxed
+hideVersion: true
+
+layout:
+  Multimedia:
+    style: row
+    columns: 3
+  Sistema:
+    style: row
+    columns: 2
