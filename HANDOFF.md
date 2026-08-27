@@ -15,11 +15,11 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 0 Inventario | ✅ | `wsl/inventario.txt` |
 | 1 WSL2 + Ubuntu | ✅ 0 fallos | WSL 2.7.12, Ubuntu-24.04, systemd `running`, usuario `jaime` |
 | 2 Docker | ✅ | Engine 29.7.2 + compose v5.5.0, `enabled` y `active`, driver `overlayfs` |
-| 3 Montajes NAS | 🔶 a medias | 2 de 5 montados en `/etc/fstab` y verificados; faltan 3 exports en DSM |
+| 3 Montajes NAS | ✅ | 4 montajes en `/etc/fstab`, verificados y con los modos correctos |
 | 4 Repo en git | ✅ | GitHub `fundacionhaptica/mediastack`, al día con `main` |
-| 5 Immich | ⏸ preparada | ficheros, `.env` e **imágenes ya descargadas**; depende de la fase 3 |
+| 5 Immich | ✅ | los tres contenedores `healthy`; falta el asistente inicial y la biblioteca externa |
 | 6 Arranque automático | ⏸ preparada | script listo; falta ejecutarlo en PowerShell elevado |
-| 7 Navidrome/Jellyfin | 🔶 a medias | **Navidrome en marcha y healthy**, 276+ canciones; Jellyfin espera al export de vídeo |
+| 7 Navidrome/Jellyfin | 🔶 a medias | los dos `healthy`; falta el backup diario de la BBDD |
 | 9 Acceso desde fuera | ⏸ preparada | Tailscale + Caddy + portal escritos; runbook en PASOS.md §9 |
 
 Configuración que ya está puesta:
@@ -47,63 +47,85 @@ Configuración que ya está puesta:
 
 ---
 
-## Fase 3 — NFS ya funciona, con dos hallazgos importantes
+## Fase 3 — resuelta, con dos hallazgos que conviene no olvidar
 
-NFS está encendido en el NAS (111 y 2049 abiertos) y hay tres exports para
-`192.168.1.227`: `/volume1/photo`, `/volume1/music` y `/volume1/homes`.
+### Hallazgo 1 — NFSv3 con `nolock`, y no es negociable
 
-### Hallazgo 1 — hay que usar NFSv3 con `nolock`, y no es negociable
-
-Con `vers=4.1` (lo que decía el plan) el mount se cuelga hasta el timeout, o monta y
-entonces el primer `ls` se cuelga. Con `vers=3,nolock` monta en **1 segundo** y lista
-contenido real.
+Con `vers=4.1` (lo que decía el plan) el mount se cuelga hasta el timeout, o monta y entonces
+el primer `ls` se cuelga. Con `vers=3,nolock` monta en **1 segundo**.
 
 La causa: el bloqueo de ficheros de NFS necesita que el **servidor llame de vuelta al
 cliente** — NLM/statd en v3, callbacks de delegación en v4. WSL2 sale por **NAT detrás de
 Windows**, así que el cliente anuncia `clientaddr=172.18.x.x` y el NAS no puede alcanzarlo
-jamás. Todo el razonamiento está en `wsl/fstab.snippet`, que ya está corregido.
+jamás. El razonamiento completo está en `wsl/fstab.snippet`.
 
 Es seguro renunciar al locking **aquí**: nada que lo necesite escribe en el NAS. Postgres,
 SQLite y la config de Jellyfin viven en ext4 local (CLAUDE.md §5); sobre el NAS solo hay
 lecturas y las subidas de Immich, con un único escritor.
 
-### Hallazgo 2 — la carpeta se llama `photo`, no `foto`
+### Hallazgo 2 — los nombres reales no eran los que suponía el plan
 
-`wsl/fstab.snippet` daba por hechas rutas que nadie había verificado. `/volume1/photo`
-contiene `MobileBackup` y `PhotoLibrary`. Ya está corregido con las rutas reales.
+`photo` (no `foto`), `Media` con M mayúscula, y `video` en minúscula. `wsl/fstab.snippet` daba
+por buenas rutas que nadie había verificado; ya lleva las reales.
 
-### Montado y verificado el 2026-08-27
+### Montajes en producción
 
-En `/etc/fstab` (con copia previa en `/etc/fstab.bak-*`), los dos exports que ya existen:
-
-| Punto de montaje | Origen | Modo | Comprobado |
+| Punto de montaje | Origen | Modo | Para qué |
 |---|---|---|---|
-| `/mnt/nas/fotos-historico` | `/volume1/photo` | `ro` | lee `PhotoLibrary/<álbum>/…jpg` reales |
-| `/mnt/nas/musica` | `/volume1/music` | `ro` | Navidrome escaneó 276+ canciones |
+| `/mnt/nas/fotos` | `/volume1/Media` | `rw` | subidas nuevas de Immich (`UPLOAD_LOCATION`) |
+| `/mnt/nas/fotos-historico` | `/volume1/photo` | `ro` | biblioteca externa de Immich |
+| `/mnt/nas/musica` | `/volume1/music` | `ro` | Navidrome |
+| `/mnt/nas/video` | `/volume1/video` | `ro` | Jellyfin |
 
-Con eso **Navidrome ya está arrancado y `healthy`** en el 4533, comiendo ~110 MB. El escaneo
-programado es a las 4:00 y el watcher está desactivado, que es lo correcto sobre NFS.
+En `/etc/fstab` con `nofail` y `x-systemd.automount`; hay copias previas en `/etc/fstab.bak-*`.
+`homes` ya no se exporta. **`verificar.sh` sale con 0 fallos.**
 
-### Lo que falta en DSM (⚠️ dos de ellas incumplen CLAUDE.md §6)
+---
 
-| Qué | Estado hoy | Debe ser |
-|---|---|---|
-| `/volume1/photo` | **lectura/escritura** | **solo lectura** — es el histórico |
-| `/volume1/music` | **lectura/escritura** | **solo lectura** |
-| `/volume1/homes` | exportada | **quitar el export** — el stack no la usa |
-| Subidas de Immich | no existe | carpeta compartida propia, **rw** |
-| Vídeo para Jellyfin | sin exportar | falta saber el nombre real, **ro** |
-| Backups de la BBDD | no existe | carpeta compartida propia, **rw** |
+## Lo que queda
 
-Mientras tanto, el `ro` del lado del cliente en `/etc/fstab` protege el histórico y la
-música aunque la regla del NAS siga en rw.
+### 1. `Media` no es legible por `jaime`, solo por root
 
-### Otros dos avisos del equipo
+`ls /mnt/nas/fotos` como `jaime` da **Permission denied**. Immich no se entera porque su
+contenedor corre como **root**, y el squash por defecto mapea root a `admin`; por eso escribe
+sin problema. Pero cualquier cosa que corra como `jaime` no puede tocar esa carpeta.
 
-- **192.168.1.227 es DHCP**, no fija. Si el router renueva la dirección, la regla NFS deja de
-  coincidir y se caen los cuatro montajes de golpe. Reservar la IP por MAC en el router.
-- **El mini PC está en Wi-Fi**, no en cable. Se va a notar en el escaneo inicial del histórico
-  y en el streaming.
+Arreglo, en la regla NFS de `Media`: squash → **«Asignar todos los usuarios a admin»**.
+
+### 2. Falta la carpeta de backups
+
+`scripts/backup-immich-db.sh` vuelca la BBDD a `/mnt/nas/backups`, que no existe. Hace falta
+una **carpeta compartida propia** en el NAS, con regla NFS en lectura/escritura, y su línea en
+`/etc/fstab`. No vale meterla dentro de `Media`: esa carpeta es la biblioteca gestionada de
+Immich y tiene su propia estructura.
+
+Y luego el cron:
+
+```
+30 0 * * * /home/jaime/mediastack/scripts/backup-immich-db.sh >> /var/log/immich-backup.log 2>&1
+```
+
+### 3. Asistentes iniciales, a mano en el navegador
+
+- **Immich** `http://192.168.1.227:2283` — crear el usuario admin y, en *Administración →
+  Bibliotecas externas*, añadir `/mnt/nas/fotos-historico`.
+- **Jellyfin** `http://192.168.1.227:8096` — asistente, y bibliotecas apuntando a `/media`
+  (la ruta **dentro** del contenedor, no la de WSL).
+- **Navidrome** `http://192.168.1.227:4533` — crear usuario. Ya tiene 276+ canciones.
+
+### 4. Vigilar la memoria de `immich_server`
+
+Arrancó al **86%** de su `mem_limit` de 1,5 GB y se asentó en el **75%**. Sin OOM kills de
+momento, pero es el contenedor más apretado del equipo y el margen es pequeño. Mirarlo durante
+el primer escaneo del histórico, que es cuando más aprieta:
+
+```bash
+docker stats --no-stream
+docker inspect immich_server --format 'OOMKilled={{.State.OOMKilled}}'
+```
+
+Si lo mata el OOM, subir `mem_limit` en `immich/docker-compose.override.yml` — hay ~2,4 GB
+disponibles en WSL — y actualizar el presupuesto de `PLAN.md` §3 en el mismo commit.
 
 ---
 
