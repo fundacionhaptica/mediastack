@@ -20,7 +20,7 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 5 Immich | ⏸ preparada | ficheros, `.env` e **imágenes ya descargadas**; depende de la fase 3 |
 | 6 Arranque automático | ⏸ preparada | script listo; falta ejecutarlo en PowerShell elevado |
 | 7 Navidrome/Jellyfin | ⏸ preparada | `.env` e **imágenes ya descargadas**; dependen de la fase 3 |
-| 9 Acceso desde fuera | ⚠️ | túnel ya creado en Cloudflare; ver la advertencia sobre Jellyfin |
+| 9 Acceso desde fuera | ⚠️ | túnel creado; decidido sacar Jellyfin de él y llevarlo a Tailscale |
 
 Configuración que ya está puesta:
 
@@ -53,7 +53,11 @@ Comprobado desde WSL el 2026-08-27: el NAS responde al ping, **445 (SMB) abierto
 **2049 y 111 cerrados** y `showmount -e 192.168.1.205` da `clnt_create: RPC: Unable to
 receive`. Exactamente igual que hace dos días.
 
-**Opción A (la del plan, recomendada).** En DSM: *Panel de control → Servicios de archivos →
+**Elegida por Jaime el 2026-08-27: opción A.** Va a encender NFS en DSM; hasta entonces las
+fases 3, 5 y 7 siguen paradas. La opción B queda como plan B ya preparado, por si NFS da los
+problemas de permisos típicos de Synology.
+
+**Opción A (la del plan, elegida).** En DSM: *Panel de control → Servicios de archivos →
 NFS → Habilitar*, máximo **NFSv4.1**, y los permisos NFS por carpeta que detalla `PASOS.md`
 fase 3 (solo lectura para música, vídeo e histórico; lectura/escritura solo para la carpeta de
 subidas de Immich).
@@ -134,22 +138,32 @@ que es un reinicio en frío.
 
 ---
 
-## Fase 9 — el túnel ya está montado, con una pega
+## Fase 9 — el túnel ya está montado; decidido sacar Jellyfin de él
 
 Túnel **MiniPC_Jaime** (Cloudflare Zero Trust, cuenta `synology-maja`):
 
-| Hostname | Servicio | Puerto local |
-|---|---|---|
-| fotos.ruizespana.com | Immich | localhost:2283 |
-| musica.ruizespana.com | Navidrome | localhost:4533 |
-| pelis.ruizespana.com | Jellyfin | localhost:8096 |
+| Hostname | Servicio | Puerto local | Estado |
+|---|---|---|---|
+| fotos.ruizespana.com | Immich | localhost:2283 | se queda en el túnel |
+| musica.ruizespana.com | Navidrome | localhost:4533 | se queda en el túnel |
+| pelis.ruizespana.com | Jellyfin | localhost:8096 | **a retirar del túnel** |
 
-⚠️ **`pelis.ruizespana.com` contradice lo decidido en `PLAN.md` §6 y en
-`cloudflared/docker-compose.yml`**: Jellyfin se dejó deliberadamente FUERA del túnel porque
-servir streaming de vídeo por el proxy gratuito de Cloudflare es zona gris de sus términos, y
-porque el límite de 100 MB por petición rompe la subida de vídeos. El plan era publicarlo por
-Tailscale con un registro DNS en nube gris. Decidir: o se quita esa ruta del túnel, o se
-actualiza el plan asumiendo el riesgo a conciencia.
+**Decisión de Jaime (2026-08-27): se quita `pelis.ruizespana.com` del túnel.** Se confirma lo
+que ya decía `PLAN.md` §6: servir streaming de vídeo por el proxy gratuito de Cloudflare es
+zona gris de sus términos, y el límite de 100 MB por petición rompe la subida de vídeos desde
+la app de Immich. Jellyfin va por Tailscale.
+
+Pendiente, en este orden:
+
+1. **En el panel de Cloudflare** (lo hace Jaime): Zero Trust → Networks → Tunnels →
+   MiniPC_Jaime → borrar la public hostname `pelis.ruizespana.com`.
+2. **Instalar Tailscale** — no está puesto en ningún sitio: ni en Windows
+   (`C:\Program Files\Tailscale`) ni en Ubuntu. Es prerrequisito de esta ruta.
+3. **Registro DNS «solo DNS» (nube gris)** en la zona `ruizespana.com` apuntando a la IP de
+   Tailscale del mini PC (100.x.y.z), para Jellyfin y para `fotos-vpn` (la URL de la app
+   móvil de Immich, que así esquiva el límite de 100 MB).
+4. Decidir el nombre: `PLAN.md` §6 lo llama `videos.ruizespana.com`; el túnel usaba `pelis.`.
+   Da igual cuál, pero que `PLAN.md` y el DNS digan lo mismo.
 
 Además, el contenedor `cloudflared` del mini PC **todavía no está levantado** y
 `cloudflared/.env` con `TUNNEL_TOKEN` no existe: hasta que el stack no esté verificado en LAN
