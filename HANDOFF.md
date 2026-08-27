@@ -15,11 +15,11 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 0 Inventario | ✅ | `wsl/inventario.txt` |
 | 1 WSL2 + Ubuntu | ✅ 0 fallos | WSL 2.7.12, Ubuntu-24.04, systemd `running`, usuario `jaime` |
 | 2 Docker | ✅ | Engine 29.7.2 + compose v5.5.0, `enabled` y `active`, driver `overlayfs` |
-| 3 Montajes NAS | 🔶 a medias | NFS encendido y 2 de 5 carpetas verificadas; faltan 3 exports |
+| 3 Montajes NAS | 🔶 a medias | 2 de 5 montados en `/etc/fstab` y verificados; faltan 3 exports en DSM |
 | 4 Repo en git | ✅ | GitHub `fundacionhaptica/mediastack`, al día con `main` |
 | 5 Immich | ⏸ preparada | ficheros, `.env` e **imágenes ya descargadas**; depende de la fase 3 |
 | 6 Arranque automático | ⏸ preparada | script listo; falta ejecutarlo en PowerShell elevado |
-| 7 Navidrome/Jellyfin | ⏸ preparada | `.env` e **imágenes ya descargadas**; dependen de la fase 3 |
+| 7 Navidrome/Jellyfin | 🔶 a medias | **Navidrome en marcha y healthy**, 276+ canciones; Jellyfin espera al export de vídeo |
 | 9 Acceso desde fuera | ⏸ preparada | Tailscale + Caddy + portal escritos; runbook en PASOS.md §9 |
 
 Configuración que ya está puesta:
@@ -71,6 +71,18 @@ lecturas y las subidas de Immich, con un único escritor.
 
 `wsl/fstab.snippet` daba por hechas rutas que nadie había verificado. `/volume1/photo`
 contiene `MobileBackup` y `PhotoLibrary`. Ya está corregido con las rutas reales.
+
+### Montado y verificado el 2026-08-27
+
+En `/etc/fstab` (con copia previa en `/etc/fstab.bak-*`), los dos exports que ya existen:
+
+| Punto de montaje | Origen | Modo | Comprobado |
+|---|---|---|---|
+| `/mnt/nas/fotos-historico` | `/volume1/photo` | `ro` | lee `PhotoLibrary/<álbum>/…jpg` reales |
+| `/mnt/nas/musica` | `/volume1/music` | `ro` | Navidrome escaneó 276+ canciones |
+
+Con eso **Navidrome ya está arrancado y `healthy`** en el 4533, comiendo ~110 MB. El escaneo
+programado es a las 4:00 y el watcher está desactivado, que es lo correcto sobre NFS.
 
 ### Lo que falta en DSM (⚠️ dos de ellas incumplen CLAUDE.md §6)
 

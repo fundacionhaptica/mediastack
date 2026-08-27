@@ -29,9 +29,9 @@ docker compose version >/dev/null 2>&1 && ok "plugin 'docker compose' presente" 
 titulo "Montajes del NAS"
 for m in /mnt/nas/fotos /mnt/nas/fotos-historico /mnt/nas/musica /mnt/nas/video; do
   if mountpoint -q "$m"; then
-    n=$(timeout 20 find "$m" -maxdepth 2 -type f 2>/dev/null | head -1)
+    n=$(timeout 20 find "$m" -maxdepth 4 -type f 2>/dev/null | head -1)
     if [ -n "$n" ]; then ok "$m montado y con contenido legible"
-    else aviso "$m montado pero no se ha leído ningún fichero en 2 niveles"; fi
+    else aviso "$m montado pero no se ha leído ningún fichero en 4 niveles"; fi
   else
     fallo "$m NO está montado"
   fi
