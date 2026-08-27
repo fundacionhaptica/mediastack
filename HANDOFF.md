@@ -15,7 +15,7 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 0 Inventario | ✅ | `wsl/inventario.txt` |
 | 1 WSL2 + Ubuntu | ✅ 0 fallos | WSL 2.7.12, Ubuntu-24.04, systemd `running`, usuario `jaime` |
 | 2 Docker | ✅ | Engine 29.7.2 + compose v5.5.0, `enabled` y `active`, driver `overlayfs` |
-| 3 Montajes NAS | ⛔ bloqueada | NFS sigue apagado en el NAS (ver abajo) |
+| 3 Montajes NAS | 🔶 a medias | NFS encendido y 2 de 5 carpetas verificadas; faltan 3 exports |
 | 4 Repo en git | ✅ | GitHub `fundacionhaptica/mediastack`, al día con `main` |
 | 5 Immich | ⏸ preparada | ficheros, `.env` e **imágenes ya descargadas**; depende de la fase 3 |
 | 6 Arranque automático | ⏸ preparada | script listo; falta ejecutarlo en PowerShell elevado |
@@ -47,40 +47,51 @@ Configuración que ya está puesta:
 
 ---
 
-## Bloqueo real que queda: NFS apagado en el NAS → fases 3, 5 y 7
+## Fase 3 — NFS ya funciona, con dos hallazgos importantes
 
-Comprobado desde WSL el 2026-08-27: el NAS responde al ping, **445 (SMB) abierto**, pero
-**2049 y 111 cerrados** y `showmount -e 192.168.1.205` da `clnt_create: RPC: Unable to
-receive`. Exactamente igual que hace dos días.
+NFS está encendido en el NAS (111 y 2049 abiertos) y hay tres exports para
+`192.168.1.227`: `/volume1/photo`, `/volume1/music` y `/volume1/homes`.
 
-**Elegida por Jaime el 2026-08-27: opción A.** Va a encender NFS en DSM; hasta entonces las
-fases 3, 5 y 7 siguen paradas. La opción B queda como plan B ya preparado, por si NFS da los
-problemas de permisos típicos de Synology.
+### Hallazgo 1 — hay que usar NFSv3 con `nolock`, y no es negociable
 
-**Opción A (la del plan, elegida).** En DSM: *Panel de control → Servicios de archivos →
-NFS → Habilitar*, máximo **NFSv4.1**, y los permisos NFS por carpeta que detalla `PASOS.md`
-fase 3 (solo lectura para música, vídeo e histórico; lectura/escritura solo para la carpeta de
-subidas de Immich).
+Con `vers=4.1` (lo que decía el plan) el mount se cuelga hasta el timeout, o monta y
+entonces el primer `ls` se cuelga. Con `vers=3,nolock` monta en **1 segundo** y lista
+contenido real.
 
-**Opción B (plan B, ya preparado).** SMB está abierto: se puede montar por CIFS con la
-variante B de `wsl/fstab.snippet`. Rinde peor con muchos ficheros pequeños, pero desbloquea
-todo hoy mismo. Hace falta usuario y contraseña de un usuario del NAS.
+La causa: el bloqueo de ficheros de NFS necesita que el **servidor llame de vuelta al
+cliente** — NLM/statd en v3, callbacks de delegación en v4. WSL2 sale por **NAT detrás de
+Windows**, así que el cliente anuncia `clientaddr=172.18.x.x` y el NAS no puede alcanzarlo
+jamás. Todo el razonamiento está en `wsl/fstab.snippet`, que ya está corregido.
 
-Al volver, lo primero — como root:
+Es seguro renunciar al locking **aquí**: nada que lo necesite escribe en el NAS. Postgres,
+SQLite y la config de Jellyfin viven en ext4 local (CLAUDE.md §5); sobre el NAS solo hay
+lecturas y las subidas de Immich, con un único escritor.
 
-```bash
-wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/montar-nas.sh diagnostico
-```
+### Hallazgo 2 — la carpeta se llama `photo`, no `foto`
 
-### Pendiente de dato: los nombres reales de las carpetas compartidas
+`wsl/fstab.snippet` daba por hechas rutas que nadie había verificado. `/volume1/photo`
+contiene `MobileBackup` y `PhotoLibrary`. Ya está corregido con las rutas reales.
 
-`wsl/fstab.snippet` asume `/volume1/foto`, `/volume1/foto-historico`, `/volume1/music`,
-`/volume1/video`, pero **eso no está verificado** — la fase 0 no llegó a inventariar el NAS.
-Se resuelve en un comando:
+### Lo que falta en DSM (⚠️ dos de ellas incumplen CLAUDE.md §6)
 
-```bash
-wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/montar-nas.sh listar-smb <usuario-del-NAS>
-```
+| Qué | Estado hoy | Debe ser |
+|---|---|---|
+| `/volume1/photo` | **lectura/escritura** | **solo lectura** — es el histórico |
+| `/volume1/music` | **lectura/escritura** | **solo lectura** |
+| `/volume1/homes` | exportada | **quitar el export** — el stack no la usa |
+| Subidas de Immich | no existe | carpeta compartida propia, **rw** |
+| Vídeo para Jellyfin | sin exportar | falta saber el nombre real, **ro** |
+| Backups de la BBDD | no existe | carpeta compartida propia, **rw** |
+
+Mientras tanto, el `ro` del lado del cliente en `/etc/fstab` protege el histórico y la
+música aunque la regla del NAS siga en rw.
+
+### Otros dos avisos del equipo
+
+- **192.168.1.227 es DHCP**, no fija. Si el router renueva la dirección, la regla NFS deja de
+  coincidir y se caen los cuatro montajes de golpe. Reservar la IP por MAC en el router.
+- **El mini PC está en Wi-Fi**, no en cable. Se va a notar en el escaneo inicial del histórico
+  y en el streaming.
 
 ---
 
@@ -199,6 +210,10 @@ no se levanta (así lo dice el propio compose).
 - El driver de almacenamiento de Docker 29 se llama **`overlayfs`**, no `overlay2`.
 - `docker inspect` de un contenedor inexistente deja un salto de línea en la salida: sin
   limpiarlo, `verificar.sh` reportaba `estado '\nausente'`. Ya corregido.
+- **La trampa de los `$` en `wsl.exe` también aplica llamando desde bash**, no solo desde
+  PowerShell 5.1: un `bash -c '...$VAR...'` pasado como argumento a `wsl.exe` pierde las
+  variables y el script se ejecuta con ellas vacías, sin dar ningún error. La regla es la
+  misma de siempre: escribir el `.sh` y ejecutarlo por su ruta.
 - La salida de `wsl.exe` llamado **desde dentro de WSL** viene en UTF-16 con NULs: pasarla por
   `tr -d '\0'` o no se puede grepear.
 

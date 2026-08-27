@@ -1,22 +1,64 @@
-# Añadir al final de /etc/fstab DENTRO de Ubuntu (sudo nano /etc/fstab).
-# Ajustar las rutas del NAS a las reales tras el inventario de la fase 0.
+# Añadir al final de /etc/fstab DENTRO de Ubuntu.
+#
+# VERIFICADO CONTRA EL NAS EL 2026-08-27. Lo que había antes aquí eran suposiciones
+# y dos de ellas eran falsas: la carpeta se llama "photo", no "foto", y NFSv4.1 NO
+# funciona en este montaje (ver abajo).
 #
 # x-systemd.automount  → monta bajo demanda, no bloquea el arranque si el NAS tarda
 # _netdev              → systemd espera a que haya red
 # nofail               → si el NAS no responde, WSL arranca igual (los contenedores
 #                        fallarán, pero el sistema es accesible para arreglarlo)
-# soft,timeo=150       → una caída del NAS da error en 15s en vez de colgar procesos
-
-# ---------- VARIANTE A: NFS (recomendada) ----------
-192.168.1.205:/volume1/foto          /mnt/nas/fotos            nfs  rw,vers=4.1,soft,timeo=150,retrans=3,nofail,x-systemd.automount,_netdev  0  0
-192.168.1.205:/volume1/foto-historico /mnt/nas/fotos-historico nfs  ro,vers=4.1,soft,timeo=150,retrans=3,nofail,x-systemd.automount,_netdev  0  0
-192.168.1.205:/volume1/music         /mnt/nas/musica           nfs  ro,vers=4.1,soft,timeo=150,retrans=3,nofail,x-systemd.automount,_netdev  0  0
-192.168.1.205:/volume1/video         /mnt/nas/video            nfs  ro,vers=4.1,soft,timeo=150,retrans=3,nofail,x-systemd.automount,_netdev  0  0
-
-# ---------- VARIANTE B: CIFS/SMB (plan B si NFS da problemas de permisos) ----------
-# Requiere: sudo apt install cifs-utils
-# y un fichero /root/.smbcred con  username=...  password=...  (chmod 600)
+# soft,timeo=100       → una caída del NAS da error en 10s en vez de colgar procesos
 #
-# //192.168.1.205/foto      /mnt/nas/fotos            cifs  credentials=/root/.smbcred,uid=1000,gid=1000,file_mode=0664,dir_mode=0775,vers=3.1.1,nofail,x-systemd.automount,_netdev  0  0
-# //192.168.1.205/music     /mnt/nas/musica           cifs  credentials=/root/.smbcred,uid=1000,gid=1000,ro,vers=3.1.1,nofail,x-systemd.automount,_netdev  0  0
-# //192.168.1.205/video     /mnt/nas/video            cifs  credentials=/root/.smbcred,uid=1000,gid=1000,ro,vers=3.1.1,nofail,x-systemd.automount,_netdev  0  0
+# ---------------------------------------------------------------------------
+# POR QUÉ vers=3 Y NO 4.1, Y POR QUÉ nolock — esto no es opcional
+# ---------------------------------------------------------------------------
+# El bloqueo de ficheros de NFS necesita que el SERVIDOR pueda llamar de vuelta al
+# CLIENTE: NLM/statd en v3, y las callbacks de delegación en v4. WSL2 sale a la red
+# por NAT detrás de Windows, así que el cliente anuncia su IP interna
+# (clientaddr=172.18.x.x) y el NAS NO puede alcanzarla nunca.
+#
+# Síntoma exacto: el mount se queda colgado hasta el timeout, o monta y luego el
+# primer `ls` se cuelga. Con vers=3,nolock monta en 1 segundo.
+#
+# Contrapartida asumida: sin bloqueo de ficheros por red. Es seguro AQUÍ porque
+# ningún proceso que necesite locking escribe en el NAS: Postgres de Immich,
+# SQLite de Navidrome y la config de Jellyfin viven en ext4 local (CLAUDE.md §5),
+# y sobre el NAS solo hay lecturas y las subidas de Immich, que tienen un único
+# escritor.
+#
+# Alternativa si algún día molesta: networkingMode=mirrored en .wslconfig hace que
+# WSL comparta la interfaz de Windows y las callbacks funcionen. Cambia toda la red
+# de WSL, así que no se toca mientras esto funcione.
+# ---------------------------------------------------------------------------
+
+# ---- Histórico de fotos: biblioteca externa de Immich, SOLO LECTURA ----
+# 'ro' aquí es la red de seguridad del lado del cliente: aunque la regla NFS del
+# NAS esté en lectura/escritura, el kernel rechaza cualquier escritura.
+192.168.1.205:/volume1/photo  /mnt/nas/fotos-historico  nfs  ro,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+
+# ---- Música para Navidrome, SOLO LECTURA ----
+192.168.1.205:/volume1/music  /mnt/nas/musica  nfs  ro,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+
+# ---- PENDIENTES: estas tres carpetas todavía no existen o no están exportadas ----
+#
+# Subidas nuevas de Immich (UPLOAD_LOCATION). Es lo ÚNICO que Immich escribe en el
+# NAS. Debe ser una carpeta compartida PROPIA: si fuera una subcarpeta de 'photo',
+# habría que exportar 'photo' en lectura/escritura y se perdería la protección del
+# histórico.
+# 192.168.1.205:/volume1/immich   /mnt/nas/fotos    nfs  rw,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+#
+# Vídeo para Jellyfin, solo lectura. Falta saber el nombre real de la carpeta.
+# 192.168.1.205:/volume1/XXXXX    /mnt/nas/video    nfs  ro,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+#
+# Destino de los volcados de la BBDD de Immich (scripts/backup-immich-db.sh).
+# 192.168.1.205:/volume1/backups  /mnt/nas/backups  nfs  rw,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+
+# ---------------------------------------------------------------------------
+# VARIANTE CIFS/SMB — plan B, no hace falta hoy. NFS funciona con las opciones de
+# arriba. Se deja documentado por si el NAS cambia.
+# Requiere cifs-utils (ya instalado) y /root/.smbcred con username= y password=
+# (chmod 600).
+#
+# //192.168.1.205/music  /mnt/nas/musica  cifs  credentials=/root/.smbcred,uid=1000,gid=1000,ro,vers=3.1.1,nofail,x-systemd.automount,_netdev  0  0
+# ---------------------------------------------------------------------------

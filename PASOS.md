@@ -66,29 +66,25 @@ carpetas reales de fotos, música y vídeo, y **cuánto ocupan**.
 
 ## FASE 1 — WSL2 + Ubuntu
 
-Lo hacen los dos scripts del repo, en este orden (PowerShell **como administrador**):
-
 ```powershell
-PS> cd C:\claude\mediastack\wsl
-PS> powershell -ExecutionPolicy Bypass -File .\01-instalar-wsl2.ps1   # activa componentes, pide REINICIO
-# ... reiniciar ...
-PS> powershell -ExecutionPolicy Bypass -File .\01-instalar-wsl2.ps1   # segunda pasada: instala Ubuntu y escribe .wslconfig
-PS> wsl -d Ubuntu-24.04                                              # crea el usuario normal (NO root)
-PS> powershell -ExecutionPolicy Bypass -File .\02-configurar-ubuntu.ps1
+PS> wsl --install -d Ubuntu-24.04
+# reiniciar si lo pide, y crear usuario + contraseña de Ubuntu cuando arranque
+PS> wsl --set-default-version 2
+PS> wsl --update
 ```
 
-Detalles que cuestan una tarde si no se saben:
+Copiar `wsl/.wslconfig.example` a `C:\Users\<TU_USUARIO>\.wslconfig` y **ajustar
+`processors` al número de núcleos** de la fase 0.
 
-- El componente `Microsoft-Windows-Subsystem-Linux` **se queda en `Disabled` para siempre**
-  y no pasa nada: solo hace falta para WSL1. El que decide es `VirtualMachinePlatform`.
-- Ubuntu se instala con `--no-launch`, así que **arranca como root** hasta que
-  `/etc/wsl.conf` fija `[user] default=`. Si la cuenta ya existe (`adduser` + `usermod -aG
-  sudo`), el paso `wsl -d Ubuntu-24.04` de arriba sobra.
-- El `.wslconfig` lo genera el script 01 en `C:\Users\<TU_USUARIO>\.wslconfig` ajustado a la
-  RAM y los núcleos reales; `wsl/.wslconfig.example` queda solo como referencia.
-- El script 02 copia `wsl/wsl.conf` a `/etc/wsl.conf` dentro de Ubuntu y hace `wsl --shutdown`.
-  Lo pasa por un `.sh` temporal a propósito: `wsl.exe` se come los `$` y las `\` de lo que
-  le llega por la línea de comandos, y PowerShell 5.1 mete un BOM si se usa la entrada estándar.
+Copiar `wsl/wsl.conf` a `/etc/wsl.conf` dentro de Ubuntu:
+
+```bash
+$ sudo cp /ruta/al/repo/wsl/wsl.conf /etc/wsl.conf
+```
+
+```powershell
+PS> wsl --shutdown
+```
 
 **VERIFICACIÓN 1** (volver a entrar en Ubuntu):
 
@@ -124,11 +120,11 @@ $ sudo systemctl enable --now docker
 $ docker run --rm hello-world
 $ docker compose version         # v2.x — "docker-compose" v1 NO sirve
 $ systemctl is-enabled docker    # enabled
-$ docker info --format '{{.Driver}}'       # overlayfs (en Docker <29 se llamaba overlay2)
+$ docker info | grep -i "storage driver"   # overlay2
 ```
 
 - [ ] `hello-world` sale sin `sudo`.
-- [ ] `docker compose version` (con espacio) responde v2 o superior.
+- [ ] `docker compose version` (con espacio) responde v2.
 - [ ] `docker` está `enabled`, si no, no arrancará solo.
 
 ---
@@ -353,10 +349,9 @@ aparece `vaapi`. Si el transcode falla → volver a comentar. Sin dramas.
 **8b. iGPU en Jellyfin** (no oficial en WSL, experimental):
 `cp jellyfin/docker-compose.hwaccel-wsl.yml.example jellyfin/docker-compose.override.yml`.
 
-**8c. Miniaturas de Immich en SSD local** (no documentado oficialmente, hazlo consciente):
-mover `thumbs/` y `encoded-video/` fuera del NAS acelera mucho la línea de tiempo, pero
-son datos regenerables que dejan de estar cubiertos por el backup del NAS. Solo si la
-navegación va lenta de verdad.
+**8c. Miniaturas de Immich en SSD local: descartado en este equipo.** Acelera la línea de
+tiempo, pero el SSD es de 128 GB y las miniaturas son un 10-20% de la biblioteca. El espacio
+manda sobre la velocidad: se quedan en el NAS.
 
 ---
 
@@ -368,74 +363,25 @@ navegación va lenta de verdad.
 |---|---|---|
 | `fotos.ruizespana.com` | Immich :2283 | Túnel, **proxy naranja** |
 | `musica.ruizespana.com` | Navidrome :4533 | Túnel, **proxy naranja** |
-| `pelis.ruizespana.com` | Jellyfin :8096 | Registro A **solo DNS (gris)** → IP Tailscale |
+| `videos.ruizespana.com` | Jellyfin :8096 | Registro A **solo DNS (gris)** → IP Tailscale |
 | `fotos-vpn.ruizespana.com` | Immich :2283 | Registro A **solo DNS (gris)** → IP Tailscale |
-| `casa.ruizespana.com` | Homepage :3000 | Registro A **solo DNS (gris)** → IP Tailscale |
 
-Los tres últimos no llegan al servicio directamente: pasan por **Caddy** (`caddy/`), que
-escucha solo en la IP del tailnet y da HTTPS con certificado válido. Sin Caddy tendrías que
-escribir el puerto a mano (`pelis.ruizespana.com:8096`) y sin cifrar. Ver `PLAN.md` §6.
+**Orden recomendado:**
 
-### 9.1 — Tailscale, dentro de WSL
-
-```bash
-$ wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/wsl/09-tailscale.sh
-# el script deja tailscaled instalado y activo; luego, autenticar:
-$ sudo tailscale up --hostname=minipc-jrh     # imprime una URL: abrirla en el navegador
-$ tailscale ip -4                             # → 100.x.y.z, la IP que va en todo lo demás
-```
-
-### 9.2 — Registros DNS grises
-
-En la zona `ruizespana.com`, tres registros **A** en modo **solo DNS (nube GRIS)** apuntando a
-esa `100.x.y.z`: `pelis`, `fotos-vpn` y `casa`. En naranja no funcionarían: Cloudflare no
-puede alcanzar una IP del rango 100.64.0.0/10.
-
-### 9.3 — Token de Cloudflare para los certificados
-
-Cloudflare → My Profile → API Tokens → *Create Token* → plantilla **Edit zone DNS**, acotada a
-la zona `ruizespana.com` (permiso `Zone:DNS:Edit`). Es lo único que Caddy necesita para el
-reto DNS-01; no publica nada.
-
-```bash
-$ cd ~/mediastack/caddy && cp .env.example .env && chmod 600 .env
-# rellenar TS_IP, CF_API_TOKEN y ACME_EMAIL
-```
-
-### 9.4 — Levantar Caddy y el portal
-
-```bash
-$ sudo mkdir -p /var/lib/mediastack/caddy/{data,config}
-$ sudo chown -R 1000:1000 /var/lib/mediastack/caddy
-
-$ cd ~/mediastack/homepage && cp .env.example .env && chmod 600 .env && docker compose up -d
-$ cd ~/mediastack/caddy && docker compose up -d --build   # la primera vez compila Caddy
-$ docker compose logs -f caddy                            # ver la emisión de certificados
-```
-
-### 9.5 — El túnel, para lo que sí va por Cloudflare
-
-`cloudflared/docker-compose.yml` está listo. Leer sus avisos de cabecera y `PLAN.md` §6 antes.
-En el panel del túnel **MiniPC_Jaime** deben quedar solo `fotos` y `musica`: si sigue estando
-`pelis.ruizespana.com`, **borrarla** — ese es justo el tráfico que no queremos por el proxy.
+1. **Tailscale primero** (`curl -fsSL https://tailscale.com/install.sh | sh` en WSL, o el
+   cliente de Windows). Anota la IP `100.x.y.z` que asigna al mini PC: es la que va en los dos
+   registros grises.
+2. **Registros DNS grises** para `videos` y `fotos-vpn` en la zona `ruizespana.com`.
+   En la app móvil de Immich se configura `https://fotos-vpn.ruizespana.com:2283` — así los
+   vídeos grandes suben sin chocar con el límite de 100 MB.
+3. **Cloudflare Tunnel** para `fotos` y `musica`. `cloudflared/docker-compose.yml` está listo;
+   leer los avisos de cabecera y `PLAN.md` §6 antes.
 
 **VERIFICACIÓN 9:**
 
-```bash
-$ tailscale status | head                       # el mini PC aparece como minipc-jrh
-$ curl -sI https://pelis.ruizespana.com | head -1   # desde otro equipo DEL tailnet
-```
-
-- [ ] `https://casa.ruizespana.com` abre el portal, con **candado válido** (no aviso de
-      certificado): eso demuestra que el DNS-01 funcionó.
-- [ ] `https://pelis.ruizespana.com` abre Jellyfin **sin puerto en la URL**.
-- [ ] Desde un equipo **fuera del tailnet**, esos tres nombres **no responden**. Si responden,
-      Caddy no está atado a `TS_IP` y los servicios están expuestos: pararlo y revisar.
-- [ ] Desde datos móviles (**Wi-Fi apagado**), con Tailscale activo en el móvil: la app de
-      Immich apuntando a `https://fotos-vpn.ruizespana.com` sube una **foto**.
-- [ ] Y sube un **vídeo de más de 100 MB**. Por Tailscale debe funcionar; por el túnel
-      **fallaría** — es el comportamiento esperado, no un bug tuyo.
-- [ ] En el panel del túnel ya **no** está `pelis.ruizespana.com`.
+- [ ] Desde datos móviles (**Wi-Fi apagado**): la app de Immich sube una **foto**.
+- [ ] Desde datos móviles: la app de Immich sube un **vídeo de más de 100 MB**.
+      Si va por Cloudflare, esto **fallará** — es el comportamiento esperado, no un bug tuyo.
 - [ ] El túnel del NAS (n8n, flota, erp, mcp) sigue funcionando igual: **no se ha tocado**.
 
 ---
