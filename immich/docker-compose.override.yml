@@ -21,7 +21,15 @@ services:
       - ${EXTERNAL_LIBRARY}:/mnt/nas/fotos-historico:ro
     # Techo de memoria: en un equipo de 8 GB, un pico del servidor no puede
     # llevarse por delante a Postgres.
-    mem_limit: 1500m
+    #
+    # Subido de 1500m a 2000m el 2026-08-27: recien arrancado y SIN biblioteca
+    # todavia, el contenedor ya se asentaba en 1,1 GB (75% del techo anterior).
+    # El momento de riesgo es el primer escaneo del historico. Los 500m extra
+    # salen del margen que ya tenia WSL, no de .wslconfig.
+    #
+    # OJO: con el perfil "ml" encendido (2500m) esto ya NO cabe holgadamente en
+    # los 5 GB de WSL. Por eso el ML sigue siendo solo a demanda y de noche.
+    mem_limit: 2000m
 
   database:
     mem_limit: 800m

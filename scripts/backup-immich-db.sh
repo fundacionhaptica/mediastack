@@ -8,17 +8,23 @@
 # Este script NO borra fotos ni toca la biblioteca. Solo escribe .sql.gz y
 # rota los volcados antiguos DENTRO de su propia carpeta de backups.
 #
+# DESTINO: /volume1/Media/backup-immich en el NAS, o sea, una subcarpeta del mismo
+# recurso compartido que usa Immich como UPLOAD_LOCATION. Decision de Jaime del
+# 2026-08-27. Immich no borra carpetas que no conoce, asi que convive sin problema;
+# la contrapartida es que volcado y biblioteca comparten carpeta compartida, y de
+# eso responde el backup del propio NAS.
+#
 # Cron (dentro de WSL, alineado con la ventana de backup del NAS a la 1:00):
 #   crontab -e
-#   30 0 * * * /home/USUARIO/mediastack/scripts/backup-immich-db.sh >> /var/log/immich-backup.log 2>&1
+#   30 0 * * * /home/jaime/mediastack/scripts/backup-immich-db.sh >> /home/jaime/immich-backup.log 2>&1
 
 set -euo pipefail
 
-DESTINO="/mnt/nas/backups/immich-db"
+DESTINO="/mnt/nas/fotos/backup-immich"
 RETENCION_DIAS=30
 CONTENEDOR="immich_postgres"
 
-mountpoint -q /mnt/nas/backups || { echo "[$(date -Is)] ERROR: /mnt/nas/backups no montado"; exit 1; }
+mountpoint -q /mnt/nas/fotos || { echo "[$(date -Is)] ERROR: /mnt/nas/fotos no montado"; exit 1; }
 mkdir -p "$DESTINO"
 
 FICHERO="$DESTINO/immich-$(date +%Y%m%d-%H%M).sql.gz"

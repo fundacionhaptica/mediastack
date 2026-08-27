@@ -97,11 +97,11 @@ Este es el apartado que decide el diseño. El reparto:
 | Windows 11 en reposo | 2,5 - 3,5 GB | En este equipo, sin nada abierto |
 | **Techo de WSL2 (`.wslconfig`)** | **5 GB** | Deja ~3 GB a Windows |
 | WSL2 (kernel + Ubuntu + dockerd) | 0,4 GB | |
-| `immich-server` | ≤ 1,5 GB | `mem_limit` en el override |
+| `immich-server` | ≤ 2,0 GB | `mem_limit` en el override. Subido de 1,5 el 2026-08-27: se asentaba en 1,1 GB sin biblioteca siquiera |
 | `immich_postgres` + `redis` | ≤ 1,0 GB | `mem_limit` |
 | `navidrome` | 0,15 GB idle | Hasta ~1 GB en escaneo completo, programado a las 4:00 |
 | `jellyfin` | 0,3 GB idle | Un transcode por software sube a ~1,5 GB: hay que evitarlo |
-| **Suma en marcha normal** | **~3,5 GB de los 5** | Queda margen |
+| **Suma en marcha normal** | **~4,0 GB de los 5** | Medido con los cinco contenedores en marcha: 2,5 GB usados de 4,8 |
 | `immich-machine-learning` | 2 - 2,5 GB | **Fuera del horario normal.** Solo a demanda, de noche |
 
 Tres medidas, las tres obligatorias en un equipo así:
