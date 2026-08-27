@@ -19,7 +19,7 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 4 Repo en git | ✅ | GitHub `fundacionhaptica/mediastack`, al día con `main` |
 | 5 Immich | ✅ | los tres contenedores `healthy`; falta el asistente inicial y la biblioteca externa |
 | 6 Arranque automático | ⏸ preparada | script listo; falta ejecutarlo en PowerShell elevado |
-| 7 Navidrome/Jellyfin | 🔶 a medias | los dos `healthy`; falta el backup diario de la BBDD |
+| 7 Navidrome/Jellyfin | ✅ | los dos `healthy` y el backup diario de la BBDD en cron |
 | 9 Acceso desde fuera | ⏸ preparada | Tailscale + Caddy + portal escritos; runbook en PASOS.md §9 |
 
 Configuración que ya está puesta:
@@ -84,26 +84,47 @@ En `/etc/fstab` con `nofail` y `x-systemd.automount`; hay copias previas en `/et
 
 ## Lo que queda
 
-### 1. `Media` no es legible por `jaime`, solo por root
+### 1. ~~Permisos de `Media`~~ y ~~carpeta de backups~~ — resueltos el 2026-08-27
 
-`ls /mnt/nas/fotos` como `jaime` da **Permission denied**. Immich no se entera porque su
-contenedor corre como **root**, y el squash por defecto mapea root a `admin`; por eso escribe
-sin problema. Pero cualquier cosa que corra como `jaime` no puede tocar esa carpeta.
-
-Arreglo, en la regla NFS de `Media`: squash → **«Asignar todos los usuarios a admin»**.
-
-### 2. Falta la carpeta de backups
-
-`scripts/backup-immich-db.sh` vuelca la BBDD a `/mnt/nas/backups`, que no existe. Hace falta
-una **carpeta compartida propia** en el NAS, con regla NFS en lectura/escritura, y su línea en
-`/etc/fstab`. No vale meterla dentro de `Media`: esa carpeta es la biblioteca gestionada de
-Immich y tiene su propia estructura.
-
-Y luego el cron:
+El squash de `Media` se cambió a **«Asignar todos los usuarios a admin»**, y los volcados van a
+`/volume1/Media/backup-immich` (decisión de Jaime: una subcarpeta del mismo recurso, en vez de
+una carpeta compartida nueva). `scripts/backup-immich-db.sh` ya apunta ahí, hace volcados de
+**18 MB** y está en el cron de `jaime`:
 
 ```
-30 0 * * * /home/jaime/mediastack/scripts/backup-immich-db.sh >> /var/log/immich-backup.log 2>&1
+30 0 * * * /home/jaime/mediastack/scripts/backup-immich-db.sh >> /home/jaime/immich-backup.log 2>&1
 ```
+
+### 2. ⚠️ Cambiar el squash de un recurso NFS deja ficheros huérfanos
+
+Cambiar el squash **con Immich ya arrancado** lo metió en un bucle de reinicio. Merece la pena
+entenderlo, porque volverá a pasar si se toca el squash de nuevo:
+
+1. Immich crea un fichero marcador `.immich` (13 bytes) en cada una de sus seis carpetas —
+   `thumbs`, `upload`, `backups`, `library`, `profile`, `encoded-video` — y **anota en su base
+   de datos** que esas carpetas ya están verificadas. Es su protección para no escribir en un
+   volumen desmontado.
+2. Los marcadores se crearon cuando root mapeaba a root, así que quedaron de `uid 0` con modo
+   644. Tras el cambio de squash, el contenedor (que corre como root) pasa a mapear a `admin`,
+   y `admin` no puede escribir un fichero de `uid 0` → `EACCES` → reinicio en bucle.
+3. `chown` y `chmod` **tampoco valen**: `admin` no es root en el NAS, da `Operation not
+   permitted`.
+4. Borrar los marcadores no basta: como la BBDD dice que ya estaban verificados, el error pasa
+   de `EACCES` a `ENOENT` y sigue sin arrancar.
+
+La salida, en este orden:
+
+```bash
+# 1. arrancar una sola vez saltándose la comprobación (fichero temporal, se borra después)
+#    services: immich-server: environment: [IMMICH_IGNORE_MOUNT_CHECK_ERRORS=true]
+# 2. recrear los seis marcadores como root, que ahora mapea a admin:
+for d in thumbs upload backups library profile encoded-video; do
+  printf '%s' "$(date +%s%3N)" > "/mnt/nas/fotos/$d/.immich"; chmod 0666 "/mnt/nas/fotos/$d/.immich"
+done
+# 3. quitar el fichero temporal y  docker compose up -d --force-recreate immich-server
+```
+
+Documentación de Immich: docs.immich.app/administration/system-integrity#folder-checks
 
 ### 3. Asistentes iniciales, a mano en el navegador
 
@@ -115,9 +136,10 @@ Y luego el cron:
 
 ### 4. Vigilar la memoria de `immich_server`
 
-Arrancó al **86%** de su `mem_limit` de 1,5 GB y se asentó en el **75%**. Sin OOM kills de
-momento, pero es el contenedor más apretado del equipo y el margen es pequeño. Mirarlo durante
-el primer escaneo del histórico, que es cuando más aprieta:
+El `mem_limit` se subió de 1,5 a **2,0 GB** el 2026-08-27, y con eso se asentó en el **42%**.
+Los 500 MB extra salieron del margen que WSL ya tenía; `.wslconfig` no se tocó. Con los cinco
+contenedores en marcha, WSL usa 2,0 GB de 4,8. Sigue mereciendo la pena mirarlo durante el
+primer escaneo del histórico, que es cuando más aprieta:
 
 ```bash
 docker stats --no-stream
