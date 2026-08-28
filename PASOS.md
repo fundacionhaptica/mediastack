@@ -308,7 +308,14 @@ PS> Get-ScheduledTaskInfo -TaskName MediaStack | Format-List LastRunTime, LastTa
 PS> wsl -d Ubuntu-24.04 -- tail -40 /var/log/mediastack-boot.log
 ```
 
-`LastTaskResult` **0** es correcto; **267011** significa que aún está corriendo.
+Códigos que vas a ver:
+
+| Código | Significa |
+|---|---|
+| `0` | Terminó bien |
+| `267009` | Se está ejecutando ahora mismo — vuelve a mirar en un minuto |
+| `267011` | Nunca se ha llegado a ejecutar |
+| `267014` | Alguien la paró a mano |
 
 Y luego la prueba de verdad:
 

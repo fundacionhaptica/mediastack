@@ -18,7 +18,7 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 3 Montajes NAS | ✅ | 4 montajes en `/etc/fstab`, verificados y con los modos correctos |
 | 4 Repo en git | ✅ | GitHub `fundacionhaptica/mediastack`, al día con `main` |
 | 5 Immich | ✅ | los tres contenedores `healthy`; falta el asistente inicial y la biblioteca externa |
-| 6 Arranque automático | ⏸ preparada | script listo; falta ejecutarlo en PowerShell elevado |
+| 6 Arranque automático | 🔶 casi | tarea `MediaStack` registrada y probada (`LastTaskResult: 0`); falta la BIOS y el reinicio en frío |
 | 7 Navidrome/Jellyfin | ✅ | los dos `healthy` y el backup diario de la BBDD en cron |
 | 9 Acceso desde fuera | ⏸ preparada | Tailscale + Caddy + portal escritos; runbook en PASOS.md §9 |
 

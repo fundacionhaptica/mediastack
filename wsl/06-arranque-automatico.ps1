@@ -86,7 +86,7 @@ Write-Host "  Start-ScheduledTask -TaskName $tarea"
 Write-Host "  Get-ScheduledTaskInfo -TaskName $tarea | Format-List LastRunTime, LastTaskResult"
 Write-Host "  wsl -d $distro -- tail -40 /var/log/mediastack-boot.log"
 Write-Host ""
-Write-Host "LastTaskResult 0 = bien. 267011 = aun corriendo." -ForegroundColor Cyan
+Write-Host "LastTaskResult: 0 = bien | 267009 = corriendo ahora | 267011 = nunca se ejecuto" -ForegroundColor Cyan
 Write-Host "Si S4U diera problemas, la alternativa es -LogonType Password, que pide"
 Write-Host "la contrasena de $usuario y la guarda en el Programador de tareas."
 Write-Host ""
