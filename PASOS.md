@@ -268,21 +268,49 @@ caídos hasta que alguien inicie sesión en el mini PC.
 Tres piezas, las tres necesarias:
 
 1. **Windows arranca solo al volver la luz** → BIOS/UEFI → *Restore on AC Power Loss = Power On*.
-2. **Inicio de sesión automático** (el mini PC no tiene a nadie delante) → `netplwiz` →
-   desmarcar "Los usuarios deben escribir su nombre...". *Ojo: implica que quien encienda el
-   equipo entra sin contraseña. Si el mini PC está en un sitio no controlado, no lo hagas y usa
-   en su lugar una tarea con "Ejecutar tanto si el usuario inició sesión como si no".*
-3. **Tarea programada que levanta WSL y el stack:**
+2. **La tarea programada** (abajo). No hace falta inicio de sesión automático: la tarea corre
+   *tanto si el usuario inició sesión como si no*.
+3. **Que el NAS arranque antes que el mini PC**, o al menos que no tarde más. Si el mini PC
+   gana la carrera, `arrancar-stack.sh` espera hasta 5 minutos a que aparezcan los montajes.
+
+### ⚠️ La tarea NO puede correr como SYSTEM
+
+Es el error del recipe "de manual" y falla **en silencio**. Las distribuciones de WSL se
+registran **por usuario de Windows**, en `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss`.
+Comprobado en este equipo el 2026-08-28: `Ubuntu-24.04` cuelga del perfil de `Admin`, y la rama
+`Lxss` de `S-1-5-18` (SYSTEM) está **vacía**. Una tarea como SYSTEM lanzaría `wsl.exe` sin
+encontrar ninguna distribución.
+
+La tarea corre como **el usuario dueño de la distro**, con `LogonType S4U`: se ejecuta sin
+sesión iniciada y **sin guardar la contraseña**. S4U no da credenciales de red de Windows, cosa
+que aquí da igual porque los montajes del NAS los hace Linux dentro de WSL.
 
 ```powershell
-PS> $accion  = New-ScheduledTaskAction -Execute "C:\Windows\System32\wsl.exe" `
-      -Argument '-d Ubuntu-24.04 -u root -- bash -lc "sudo -u TU_USUARIO /home/TU_USUARIO/mediastack/scripts/arrancar-stack.sh >> /var/log/mediastack-boot.log 2>&1"'
-PS> $disparador = New-ScheduledTaskTrigger -AtStartup
-PS> $opciones = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit 0
-PS> Register-ScheduledTask -TaskName "MediaStack" -Action $accion -Trigger $disparador -Settings $opciones -RunLevel Highest -User "SYSTEM"
+PS> powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\06-arranque-automatico.ps1
 ```
 
-**VERIFICACIÓN 6 — la prueba de verdad:**
+El script comprueba la elevación y que la distro pertenezca a ese usuario antes de registrar
+nada, y es idempotente.
+
+### Qué levanta
+
+`scripts/boot-mediastack.sh` (como root) → espera a `dockerd` → baja a `jaime` →
+`scripts/arrancar-stack.sh` → espera a los montajes del NAS → `docker compose up -d` de los
+tres stacks. Log en `/var/log/mediastack-boot.log`.
+
+**VERIFICACIÓN 6:**
+
+Primero, sin reiniciar:
+
+```powershell
+PS> Start-ScheduledTask -TaskName MediaStack
+PS> Get-ScheduledTaskInfo -TaskName MediaStack | Format-List LastRunTime, LastTaskResult
+PS> wsl -d Ubuntu-24.04 -- tail -40 /var/log/mediastack-boot.log
+```
+
+`LastTaskResult` **0** es correcto; **267011** significa que aún está corriendo.
+
+Y luego la prueba de verdad:
 
 ```powershell
 PS> Restart-Computer
@@ -291,12 +319,13 @@ PS> Restart-Computer
 Esperar 5 minutos **sin tocar el teclado ni iniciar sesión a mano**, y desde otro equipo:
 
 ```bash
-$ curl -I http://<ip-del-minipc>:2283
+$ curl -I http://192.168.1.227:2283
 ```
 
 - [ ] Immich responde tras un reinicio en frío sin intervención humana.
-- [ ] `wsl -d Ubuntu-24.04 -- cat /var/log/mediastack-boot.log` muestra el arranque.
-- [ ] Los montajes del NAS están puestos tras el reinicio.
+- [ ] `/var/log/mediastack-boot.log` muestra el arranque, con la marca de tiempo del reinicio.
+- [ ] Los montajes del NAS están puestos tras el reinicio (`mount | grep 192.168.1.205`).
+- [ ] `bash ~/mediastack/scripts/verificar.sh` sale con 0 fallos.
 
 ---
 
