@@ -5,18 +5,33 @@
 #
 # Idempotente: si la tarea "MediaStack" ya existe, la reemplaza.
 #
-# Esto es SOLO la pieza 3 de las tres que hacen falta. Las otras dos son manuales:
-#   1. BIOS/UEFI -> Restore on AC Power Loss = Power On
-#   2. Inicio de sesion automatico (netplwiz) NO hace falta con esta tarea, porque
-#      corre como SYSTEM "tanto si el usuario inicio sesion como si no".
+# ---------------------------------------------------------------------------
+# POR QUE NO CORRE COMO SYSTEM (esto es lo que rompe el recipe "de manual")
+# ---------------------------------------------------------------------------
+# Las distribuciones de WSL se registran POR USUARIO de Windows, en
+# HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss. Comprobado en este equipo
+# el 2026-08-28: Ubuntu-24.04 esta bajo el perfil de 'Admin', y la rama Lxss de
+# S-1-5-18 (SYSTEM) esta VACIA.
+#
+# Una tarea que corriera como SYSTEM lanzaria wsl.exe y no encontraria ninguna
+# distribucion: fallaria en cada arranque, y ademas en silencio, porque nadie
+# esta delante para verlo.
+#
+# Por eso corre como el usuario dueno de la distro, con LogonType S4U: se ejecuta
+# aunque no haya nadie con la sesion iniciada y NO hay que guardar la contrasena
+# en ningun sitio. La contrapartida de S4U es que la tarea no tiene credenciales
+# de red de Windows, cosa que aqui da igual: los montajes del NAS los hace el
+# propio Linux dentro de WSL, no el token de Windows.
+# ---------------------------------------------------------------------------
 
 $ErrorActionPreference = 'Stop'
 
-$distro = 'Ubuntu-24.04'
-$script = '/home/jaime/mediastack/scripts/boot-mediastack.sh'
-$tarea  = 'MediaStack'
+$distro  = 'Ubuntu-24.04'
+$script  = '/home/jaime/mediastack/scripts/boot-mediastack.sh'
+$tarea   = 'MediaStack'
+$usuario = "$env:COMPUTERNAME\$env:USERNAME"   # el usuario que ejecuta esto
 
-# Comprobacion de elevacion: sin esto Register-ScheduledTask -User SYSTEM da acceso denegado.
+# Comprobacion de elevacion: sin esto Register-ScheduledTask da acceso denegado.
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $pr = New-Object Security.Principal.WindowsPrincipal($id)
 if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -24,12 +39,32 @@ if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   exit 1
 }
 
+# Comprobacion de que la distro es de ESTE usuario. Si no, la tarea no funcionaria.
+$lxss = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss'
+$distros = @()
+if (Test-Path $lxss) {
+  $distros = Get-ChildItem $lxss | ForEach-Object { (Get-ItemProperty $_.PSPath).DistributionName }
+}
+if ($distros -notcontains $distro) {
+  Write-Host "ERROR: '$distro' no esta registrada para el usuario $usuario." -ForegroundColor Red
+  Write-Host "Distros de este usuario: $($distros -join ', ')" -ForegroundColor Yellow
+  Write-Host "Ejecuta este script desde la sesion del usuario dueno de la distro." -ForegroundColor Yellow
+  exit 1
+}
+
 # El argumento va sin comillas internas ni '$' a proposito: wsl.exe recibe solo
-# una ruta. Toda la logica (log, sudo, espera a dockerd) esta dentro del .sh.
+# una ruta. Toda la logica (log, espera a dockerd, sudo) esta dentro del .sh.
 $argumento = "-d $distro -u root -- $script"
 
 $accion = New-ScheduledTaskAction -Execute 'C:\Windows\System32\wsl.exe' -Argument $argumento
+
+# 30 s de margen tras el arranque: da tiempo a que la red este lista antes de que
+# Linux empiece a buscar el NAS.
 $disparador = New-ScheduledTaskTrigger -AtStartup
+$disparador.Delay = 'PT30S'
+
+$principal = New-ScheduledTaskPrincipal -UserId $usuario -LogonType S4U -RunLevel Highest
+
 $opciones = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
               -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
 
@@ -39,15 +74,20 @@ if (Get-ScheduledTask -TaskName $tarea -ErrorAction SilentlyContinue) {
 }
 
 Register-ScheduledTask -TaskName $tarea -Action $accion -Trigger $disparador `
-  -Settings $opciones -RunLevel Highest -User 'SYSTEM' | Out-Null
+  -Principal $principal -Settings $opciones | Out-Null
 
-Write-Host "Tarea '$tarea' registrada." -ForegroundColor Green
+Write-Host "Tarea '$tarea' registrada para $usuario (S4U)." -ForegroundColor Green
 Get-ScheduledTask -TaskName $tarea | Format-List TaskName, State
 (Get-ScheduledTask -TaskName $tarea).Actions | Format-List Execute, Arguments
 
 Write-Host ""
 Write-Host "Probarla SIN reiniciar:" -ForegroundColor Cyan
 Write-Host "  Start-ScheduledTask -TaskName $tarea"
-Write-Host "  wsl -d $distro -- tail -30 /var/log/mediastack-boot.log"
+Write-Host "  Get-ScheduledTaskInfo -TaskName $tarea | Format-List LastRunTime, LastTaskResult"
+Write-Host "  wsl -d $distro -- tail -40 /var/log/mediastack-boot.log"
+Write-Host ""
+Write-Host "LastTaskResult 0 = bien. 267011 = aun corriendo." -ForegroundColor Cyan
+Write-Host "Si S4U diera problemas, la alternativa es -LogonType Password, que pide"
+Write-Host "la contrasena de $usuario y la guarda en el Programador de tareas."
 Write-Host ""
 Write-Host "La prueba de verdad es un reinicio en frio (VERIFICACION 6 de PASOS.md)."
