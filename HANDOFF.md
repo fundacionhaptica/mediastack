@@ -18,7 +18,7 @@ NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `
 | 3 Montajes NAS | ✅ | 4 montajes en `/etc/fstab`, verificados y con los modos correctos |
 | 4 Repo en git | ✅ | GitHub `fundacionhaptica/mediastack`, al día con `main` |
 | 5 Immich | ✅ | los tres contenedores `healthy`; falta el asistente inicial y la biblioteca externa |
-| 6 Arranque automático | 🔶 casi | tarea `MediaStack` registrada y probada (`LastTaskResult: 0`); falta la BIOS y el reinicio en frío |
+| 6 Arranque automático | 🔶 casi | tarea registrada y probada; **BIOS y reinicio en frío aplazados a propósito** |
 | 7 Navidrome/Jellyfin | ✅ | los dos `healthy` y el backup diario de la BBDD en cron |
 | 9 Acceso desde fuera | ⏸ preparada | Tailscale + Caddy + portal escritos; runbook en PASOS.md §9 |
 
@@ -189,19 +189,33 @@ cd ~/mediastack/jellyfin  && docker compose up -d
 bash ~/mediastack/scripts/verificar.sh   # tiene que salir 0 fallos
 ```
 
-## Fase 6 — cuando el stack esté en verde
+## Fase 6 — hecha a medias, y el resto aplazado a propósito
 
-En **PowerShell elevado** en el mini PC (el script comprueba la elevación y aborta si no):
+La tarea **`MediaStack`** está registrada y probada el 2026-08-28: corre como `Admin` con
+`LogonType S4U` y `RunLevel Highest`, disparador al inicio con 30 s de margen, y termina con
+`LastTaskResult: 0`. La cadena entera (root → espera a `dockerd` → baja a `jaime` →
+`arrancar-stack.sh`) queda registrada en `/var/log/mediastack-boot.log`.
+
+⚠️ **Pendiente, aplazado por Jaime el 2026-08-28. Hasta que se haga, el arranque automático NO
+está garantizado:**
+
+1. **BIOS/UEFI → *Restore on AC Power Loss = Power On***. Sin esto, tras un corte de luz el
+   mini PC no se enciende siquiera, y la tarea programada da igual.
+2. **Reinicio en frío**, la única prueba que vale. Reiniciar, esperar 5 minutos sin tocar el
+   teclado ni iniciar sesión, y desde otro equipo `curl -I http://192.168.1.227:2283`.
+
+Mientras tanto, si el equipo se apaga, el stack se levanta con:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\06-arranque-automatico.ps1
+wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/boot-mediastack.sh
 ```
 
-Registra la tarea `MediaStack` (al inicio, como SYSTEM) que llama a
-`scripts/boot-mediastack.sh`: ese espera a dockerd, baja a `jaime` y ejecuta
-`arrancar-stack.sh`, dejando log en `/var/log/mediastack-boot.log`. Faltan además las dos
-piezas manuales: **BIOS → Restore on AC Power Loss = Power On**, y la verificación de verdad,
-que es un reinicio en frío.
+### Por qué la tarea no puede correr como SYSTEM
+
+Las distribuciones de WSL se registran **por usuario de Windows**, en `HKCU\...\Lxss`.
+Comprobado: `Ubuntu-24.04` cuelga del perfil de `Admin` y la rama de `S-1-5-18` está vacía. Una
+tarea como SYSTEM lanzaría `wsl.exe` sin encontrar ninguna distribución, y fallaría **en
+silencio** en cada arranque.
 
 ---
 
