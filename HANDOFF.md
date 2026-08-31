@@ -234,6 +234,31 @@ que ya decía `PLAN.md` §6: servir streaming de vídeo por el proxy gratuito de
 zona gris de sus términos, y el límite de 100 MB por petición rompe la subida de vídeos desde
 la app de Immich. Jellyfin va por Tailscale.
 
+### Actualización 2026-08-31 — `pelis.` y `fotos-vpn.` pasan de Tailscale-only a públicas
+
+Motivo: hace falta compartir contenido (p. ej. el material de un evento) con gente que no va a
+instalarse Tailscale. Exigir tailnet para eso no vale. **Decisión de Jaime: montar un Caddy
+propio en una VM Oracle Cloud Always Free (IP pública), que reenvía por Tailscale al mini PC —
+la VM se deja siempre encendida (Always Free no cobra por eso).** Sigue evitando los dos avisos
+de Cloudflare (§6) porque no hay proxy de Cloudflare de por medio, solo DNS apuntando a un
+servidor propio.
+
+Queda escrito y listo para ejecutar en `oracle-vps/` (README con el paso a paso de la consola de
+OCI, `setup.sh`, `docker-compose.yml` y `Caddyfile`). Se han actualizado en consecuencia:
+`caddy/Caddyfile` del mini PC (ya no sirve `pelis.`/`fotos-vpn.`, solo `casa.`),
+`cloudflared/docker-compose.yml` (comentario con los hostnames públicos) y `PLAN.md` §6.
+
+Pendiente, de la parte de Jaime (nada de esto se puede hacer desde este repo, requiere la
+consola de Oracle Cloud y credenciales suyas):
+
+1. Crear la instancia Always Free en `cloud.oracle.com` (`oracle-vps/README.md` paso 1).
+2. Abrir 80/443 en el Security List de la VCN — capa de firewall de la nube, aparte del `ufw`
+   que instala `setup.sh` en la propia VM.
+3. `ssh` a la VM, clonar el repo, correr `oracle-vps/setup.sh` con un `TAILSCALE_AUTHKEY`.
+4. `docker compose up -d` en `oracle-vps/` con `MINIPC_TS_IP` puesta en `.env`.
+5. Cambiar en Cloudflare los registros A de `pelis` y `fotos-vpn` (nube gris) de la IP de
+   Tailscale del mini PC a la IP pública de la VM.
+
 **Ya está escrito y listo para ejecutar** (runbook completo en `PASOS.md` fase 9):
 
 - `wsl/09-tailscale.sh` — instala Tailscale **dentro de Ubuntu**, no en Windows, y explica por

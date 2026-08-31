@@ -1,0 +1,21 @@
+# Borde público de pelis./fotos-vpn., en la VM Oracle. Ver oracle-vps/README.md.
+#
+# Escucha en :80/:443 de verdad (IP pública), así que el reto HTTP-01 de Let's Encrypt
+# funciona sin más — no hace falta el token de Cloudflare ni el módulo DNS que sí usa
+# caddy/Caddyfile en el mini PC.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Jellyfin. Antes era solo-Tailscale (PLAN.md §6); ahora público a propósito para poder
+# compartir contenido (p. ej. un evento) con gente sin Tailscale.
+pelis.ruizespana.com {
+	reverse_proxy {$MINIPC_TS_IP}:8096
+}
+
+# Immich, la URL de la app móvil. Público por el mismo motivo; sigue sin pasar por
+# Cloudflare, así que el límite de 100 MB de su plan gratuito no aplica aquí.
+fotos-vpn.ruizespana.com {
+	reverse_proxy {$MINIPC_TS_IP}:2283
+}
