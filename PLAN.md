@@ -193,38 +193,53 @@ detrás de Cloudflare Tunnel funciona técnicamente, pero no es lo que Cloudflar
 |---|---|---|---|
 | `fotos.ruizespana.com` | Immich · 2283 | Cloudflare Tunnel (proxy naranja) | Para compartir álbumes con familia que no va a instalarse nada |
 | `musica.ruizespana.com` | Navidrome · 4533 | Cloudflare Tunnel (proxy naranja) | Audio, ligero, sin problema de límites |
-| `pelis.ruizespana.com` | Jellyfin · 8096 | **Registro DNS «solo DNS» (nube gris) → IP Tailscale del mini PC** | Esquiva la zona gris de términos de Cloudflare con vídeo pesado y no mete el streaming por el proxy |
-| `fotos-vpn.ruizespana.com` | Immich · 2283 | **Solo DNS → IP Tailscale** | Es la URL que se pone en la **app móvil**: sin el límite de 100 MB, los vídeos suben |
-| `casa.ruizespana.com` | Homepage · 3000 | **Solo DNS → IP Tailscale** | Portal de entrada con las tres apps y el estado del equipo |
+| `pelis.ruizespana.com` | Jellyfin · 8096 | **Registro DNS «solo DNS» (nube gris) → IP pública de una VM Oracle** | Público de verdad, sin pasar por Cloudflare: ni el límite de 100 MB ni la zona gris de términos aplican |
+| `fotos-vpn.ruizespana.com` | Immich · 2283 | **Solo DNS → IP pública de la misma VM Oracle** | Es la URL que se pone en la **app móvil**: sin el límite de 100 MB, los vídeos suben, y ahora también accesible sin Tailscale |
+| `casa.ruizespana.com` | Homepage · 3000 | **Solo DNS → IP Tailscale del mini PC** | Portal de entrada/administración; sigue privado a propósito |
 
-Los cuatro nombres funcionan y son cómodos de recordar. La diferencia está en si el tráfico pasa
-o no por el proxy de Cloudflare:
+La diferencia está en si el tráfico pasa por el proxy de Cloudflare, y si el destino final es
+alcanzable desde cualquier sitio o solo desde el tailnet:
 
-- **Naranja (proxy):** accesible desde cualquier sitio sin instalar nada, pero con el corte de
-  100 MB por petición y las limitaciones de contenido pesado.
+- **Naranja (proxy Cloudflare):** accesible desde cualquier sitio sin instalar nada, pero con el
+  corte de 100 MB por petición y las limitaciones de contenido pesado.
 - **Gris (solo DNS) apuntando a la IP de Tailscale (rango 100.64.0.0/10):** esa IP no es
   enrutable en Internet, así que el nombre solo resuelve útilmente desde tus dispositivos con
   Tailscale. Es acceso privado con nombre bonito, sin abrir un puerto y sin límite de tamaño.
+  Es lo que usa `casa.ruizespana.com`.
+- **Gris (solo DNS) apuntando a la IP pública de una VM propia (Oracle Cloud Always Free):**
+  accesible desde cualquier sitio, como el naranja, pero sin que Cloudflare toque el tráfico —
+  así se evitan sus dos avisos sin exigirle tailnet al visitante. El coste: ahora hay un servidor
+  propio con IP pública que mantener. Es lo que usan `pelis.` y `fotos-vpn.` desde que hizo
+  falta acceso público de verdad (compartir contenido con gente sin Tailscale — p. ej. el
+  material de un evento). Detalle completo, runbook y por qué la VM se deja **siempre
+  encendida**: `oracle-vps/README.md`.
 
 | Uso | Vía |
 |---|---|
-| Copia de seguridad del móvil (Immich) | `fotos-vpn.ruizespana.com` → **Tailscale** |
-| Ver Jellyfin fuera de casa | `pelis.ruizespana.com` → **Tailscale** |
+| Copia de seguridad del móvil (Immich) | `fotos-vpn.ruizespana.com` → **VM Oracle → Tailscale → mini PC** |
+| Ver Jellyfin, incluso compartir con gente sin Tailscale | `pelis.ruizespana.com` → **VM Oracle → Tailscale → mini PC** |
 | Compartir un álbum con familia sin instalarles nada | `fotos.ruizespana.com` → **Cloudflare Tunnel** |
 | Escuchar música fuera de casa | `musica.ruizespana.com` → **Cloudflare Tunnel** |
+| Panel de administración, solo para ti | `casa.ruizespana.com` → **Tailscale** |
 
 ### Un registro DNS apunta a una IP, no a un puerto
 
-Detalle que rompe la idea si se pasa por alto: `pelis.ruizespana.com → 100.x.y.z` hace que el
-nombre resuelva, pero el navegador va al **443**, no al **8096**. Tal cual, lo que queda es
-`pelis.ruizespana.com:8096`, sin HTTPS.
+Detalle que rompe la idea si se pasa por alto: `casa.ruizespana.com → 100.x.y.z` hace que el
+nombre resuelva, pero el navegador va al **443**, no al puerto real del servicio. Tal cual, lo
+que queda es `casa.ruizespana.com:3000`, sin HTTPS. El mismo problema existe igual apuntando a
+una IP pública en vez de a la de Tailscale.
 
-Por eso los nombres de Tailscale pasan por un **reverse proxy propio, Caddy** (`caddy/`), que
-escucha **solo en la IP del tailnet** y reparte a `localhost:8096 / 2283 / 3000`. Los
-certificados los saca de Let's Encrypt por el reto **DNS-01 contra Cloudflare**: como
-`ruizespana.com` es un dominio público de verdad, el certificado es válido y se renueva solo
-**sin abrir un solo puerto a Internet**. La imagen de Caddy se compila (`caddy/Dockerfile`)
-porque la oficial no trae el proveedor DNS de Cloudflare.
+Por eso `casa.ruizespana.com` pasa por un **reverse proxy propio, Caddy** (`caddy/`), que
+escucha **solo en la IP del tailnet** y reparte a `localhost:3000`. Los certificados los saca de
+Let's Encrypt por el reto **DNS-01 contra Cloudflare**: como `ruizespana.com` es un dominio
+público de verdad, el certificado es válido y se renueva solo **sin abrir un solo puerto a
+Internet**. La imagen de Caddy se compila (`caddy/Dockerfile`) porque la oficial no trae el
+proveedor DNS de Cloudflare.
+
+`pelis.` y `fotos-vpn.` resuelven el mismo problema con la **misma pieza (Caddy), pero en la VM
+Oracle** (`oracle-vps/`): ese Caddy sí escucha en el puerto público 80/443 de verdad, así que
+puede sacar el certificado por **HTTP-01** normal — no necesita el módulo de Cloudflare ni
+compilar nada — y reenvía por Tailscale a `localhost:8096`/`:2283` del mini PC.
 
 Consecuencia de diseño: **Tailscale va dentro de Ubuntu/WSL, no en Windows**. Si `tailscaled`
 corriera en Windows, la IP del tailnet sería de Windows y los contenedores están en WSL: el

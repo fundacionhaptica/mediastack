@@ -1,0 +1,27 @@
+name: oracle-vps-caddy
+
+# Caddy público de la VM Oracle. Ver oracle-vps/README.md.
+#
+# A diferencia de caddy/ (mini PC, solo Tailscale), este escucha en la IP pública de la
+# VM y no necesita el módulo DNS de Cloudflare: el reto HTTP-01 le vale porque el puerto
+# 80 sí está abierto a Internet aquí. Por eso usa la imagen oficial, sin compilar nada.
+
+services:
+  caddy:
+    image: caddy:2
+    container_name: caddy-oracle-vps
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - MINIPC_TS_IP=${MINIPC_TS_IP}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
