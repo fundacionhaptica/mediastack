@@ -229,7 +229,8 @@ $ docker compose logs -f immich-server     # Ctrl+C cuando diga que escucha en 2
 > deliberado: con 7,9 GB de RAM no cabe en horario normal (ver `PLAN.md` §3 y el anexo ML
 > al final de este documento).
 
-Después, en `http://192.168.1.227:2283`:
+Después, en el navegador **del propio mini PC**, en `http://localhost:2283` (desde otro equipo
+de la LAN no responde: ver el aviso de la fase 6):
 
 1. Crear el usuario administrador (el primero que entra es admin).
 2. Administración → Ajustes → **Machine Learning** → *desactivar*. Si se queda activo con el
@@ -323,16 +324,39 @@ Y luego la prueba de verdad:
 PS> Restart-Computer
 ```
 
-Esperar 5 minutos **sin tocar el teclado ni iniciar sesión a mano**, y desde otro equipo:
+Esperar 5 minutos **sin tocar el teclado ni iniciar sesión a mano**.
 
-```bash
-$ curl -I http://192.168.1.227:2283
+> ⚠️ **`curl -I http://192.168.1.227:2283` desde otro equipo NO vale como prueba**, aunque sea
+> lo que pedía este runbook hasta el 2026-09-01. Los contenedores escuchan dentro de Ubuntu y
+> el reenvío automático de WSL2 solo cubre `localhost` **del propio Windows**: desde la LAN no
+> responde nadie ni con el stack perfectamente arrancado. Comprobado el 2026-09-01 sondeando
+> desde el NAS — ningún equipo del `192.168.1.0/24` sirve 2283/4533/8096, con el mini PC
+> encendido. Que falle eso no dice nada sobre el arranque automático.
+
+Pasados los cinco minutos, ya puedes iniciar sesión: lo que se comprueba es que el stack
+llevaba rato en pie **antes** de que tú tocaras nada, y para eso valen las marcas de tiempo.
+
+```powershell
+PS> Get-CimInstance Win32_OperatingSystem | Select-Object LastBootUpTime
+PS> wsl -d Ubuntu-24.04 -- docker ps --format '{{.Names}}\t{{.Status}}'
+PS> wsl -d Ubuntu-24.04 -- tail -40 /var/log/mediastack-boot.log
 ```
 
-- [ ] Immich responde tras un reinicio en frío sin intervención humana.
+- [ ] El `Status` de los contenedores dice `Up N minutes`, coherente con `LastBootUpTime` y
+      **anterior** al momento en que iniciaste sesión. Eso es lo que prueba que arrancó solo.
 - [ ] `/var/log/mediastack-boot.log` muestra el arranque, con la marca de tiempo del reinicio.
 - [ ] Los montajes del NAS están puestos tras el reinicio (`mount | grep 192.168.1.205`).
 - [ ] `bash ~/mediastack/scripts/verificar.sh` sale con 0 fallos.
+
+Y la prueba **desde otro equipo**, la que de verdad convence, queda disponible en cuanto esté
+la fase 9b (Tailscale): desde cualquier dispositivo del tailnet,
+
+```bash
+$ curl -I http://100.x.y.z:2283      # la IP de 'tailscale ip -4' en el mini PC
+```
+
+Eso sí funciona sin exponer nada a la LAN, porque `tailscaled` corre **dentro** de Ubuntu, en
+el mismo sitio que los contenedores (`PLAN.md` §6).
 
 ---
 

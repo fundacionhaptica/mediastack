@@ -128,11 +128,14 @@ Documentación de Immich: docs.immich.app/administration/system-integrity#folder
 
 ### 3. Asistentes iniciales, a mano en el navegador
 
-- **Immich** `http://192.168.1.227:2283` — crear el usuario admin y, en *Administración →
+**En el navegador del propio mini PC**, con `localhost`: desde otro equipo de la LAN estos
+puertos no responden (ver «Estado a 2026-09-01» al final de este documento).
+
+- **Immich** `http://localhost:2283` — crear el usuario admin y, en *Administración →
   Bibliotecas externas*, añadir `/mnt/nas/fotos-historico`.
-- **Jellyfin** `http://192.168.1.227:8096` — asistente, y bibliotecas apuntando a `/media`
+- **Jellyfin** `http://localhost:8096` — asistente, y bibliotecas apuntando a `/media`
   (la ruta **dentro** del contenedor, no la de WSL).
-- **Navidrome** `http://192.168.1.227:4533` — crear usuario. Ya tiene 276+ canciones.
+- **Navidrome** `http://localhost:4533` — crear usuario. Ya tiene 276+ canciones.
 
 ### 4. Vigilar la memoria de `immich_server`
 
@@ -198,7 +201,9 @@ está garantizado:**
 1. **BIOS/UEFI → *Restore on AC Power Loss = Power On***. Sin esto, tras un corte de luz el
    mini PC no se enciende siquiera, y la tarea programada da igual.
 2. **Reinicio en frío**, la única prueba que vale. Reiniciar, esperar 5 minutos sin tocar el
-   teclado ni iniciar sesión, y desde otro equipo `curl -I http://192.168.1.227:2283`.
+   teclado ni iniciar sesión, y comprobar por marcas de tiempo que el stack ya estaba en pie
+   antes de que iniciaras sesión — el runbook actualizado está en `PASOS.md` §6. **No** sirve
+   `curl` desde otro equipo de la LAN: esos puertos no salen de WSL.
 
 Mientras tanto, si el equipo se apaga, el stack se levanta con:
 
@@ -325,18 +330,52 @@ bash ~/mediastack/scripts/verificar.sh
 ### Comprobar el estado del mini PC en remoto
 
 Desde una sesión sin acceso a la LAN de casa, el NAS sirve de punto de observación (está en la
-misma red). Un sondeo de puertos vale para saber si el stack está vivo:
+misma red). **Ojo con el método**: el contenedor del MCP del NAS corre `dash`, no `bash`, así
+que `/dev/tcp/host/puerto` **no existe** ahí y falla siempre en silencio — da «cerrado» para
+todo, incluidos los puertos que están abiertos. Un sondeo hecho así el 2026-09-01 llevó a
+concluir, mal, que el mini PC estaba apagado.
+
+Lo que sí funciona es `curl`, y siempre **validándolo primero contra el NAS**, que sabemos vivo:
 
 ```bash
+# ¿responde HTTP?  (000 = no contesta)
 for p in 2283 4533 8096; do
   printf '%s -> ' $p
-  curl -s -o /dev/null -w '%{http_code}\n' --max-time 6 http://192.168.1.227:$p/
+  curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 http://192.168.1.227:$p/
 done
+
+# ¿está el equipo encendido?  El código de salida de curl distingue lo que el
+# código HTTP no puede. Validar el método contra el NAS antes de creerse nada:
+#   192.168.1.205:445  -> 28  (abierto, no habla HTTP)
+#   192.168.1.205:9999 -> 7   (cerrado)
+curl -s -o /dev/null --connect-timeout 4 --max-time 6 http://192.168.1.227:445/; echo $?
 ```
 
-⚠️ El 2026-09-01 esto dio `000` en los tres, y tampoco respondían 445/135/3389: **el mini PC
-estaba apagado o fuera de la red**, no es que el stack se hubiera caído. Ojo también con la
-otra lectura posible: los contenedores viven en WSL2, así que responder en `localhost` del
-propio Windows no garantiza responder en `192.168.1.227` desde la LAN. Si el equipo está
-encendido y aun así da `000`, comprobar eso antes de tocar nada — y es justo lo que hay que
-tener resuelto para la prueba de reinicio en frío de la fase 6.
+| Código de salida | Significa |
+|---|---|
+| `7` | Conexión rechazada o host inalcanzable |
+| `28` | Timeout: puerto filtrado, o el equipo no está |
+| `52` / `56` | **Conectó**: hay alguien al otro lado. El equipo está encendido |
+
+### Estado a 2026-09-01: encendido, pero WSL no se ve desde la LAN
+
+`445` da `56` (conecta y corta) → **el mini PC está encendido y en la red**. Pero `2283`, `4533`
+y `8096` dan timeout, y un barrido de `192.168.1.0/24` no encuentra esos puertos en **ninguna**
+IP: no es que haya cambiado de IP.
+
+La explicación más probable es la de siempre con WSL2: los contenedores escuchan dentro de
+Ubuntu, y el reenvío automático de WSL2 solo cubre **`localhost` del propio Windows**. Desde
+otro equipo de la LAN no hay nada que responda, aunque el stack esté perfectamente arrancado.
+Para confirmarlo, en el mini PC:
+
+```powershell
+PS> curl.exe -I http://localhost:2283          # si responde aquí, el stack está bien
+PS> netsh interface portproxy show v4tov4      # ¿hay reenvío a la LAN? (esperado: vacío)
+PS> Get-NetFirewallRule -DisplayName *2283* | Format-List DisplayName,Enabled,Direction,Action
+```
+
+**Esto no bloquea la fase 9**: Tailscale corre *dentro* de Ubuntu y Caddy escucha en la IP del
+tailnet, también dentro de Ubuntu, así que todo termina en el mismo sitio que los contenedores
+y no necesita exposición a la LAN. Es justo la razón por la que `PLAN.md` §6 puso Tailscale
+dentro de WSL y descartó `netsh portproxy`. Lo único que sí rompe es la verificación de la
+fase 6 tal como estaba escrita — ver `PASOS.md` §6.
