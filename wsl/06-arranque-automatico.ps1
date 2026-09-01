@@ -1,7 +1,7 @@
 # FASE 6 - tarea programada que levanta WSL y el stack al encender el mini PC.
 #
 # EJECUTAR EN POWERSHELL COMO ADMINISTRADOR, en el mini PC:
-#   powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\06-arranque-automatico.ps1
+#   powershell -ExecutionPolicy Bypass -File \\wsl.localhost\Ubuntu-24.04\home\jaime\mediastack\wsl\06-arranque-automatico.ps1
 #
 # Idempotente: si la tarea "MediaStack" ya existe, la reemplaza.
 #

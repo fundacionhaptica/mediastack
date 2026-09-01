@@ -7,7 +7,7 @@
 # sintoma es identico a no haber cambiado nada.
 #
 # Ejecutar en PowerShell COMO ADMINISTRADOR:
-#   powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\08b-red-mirrored.ps1
+#   powershell -ExecutionPolicy Bypass -File \\wsl.localhost\Ubuntu-24.04\home\jaime\mediastack\wsl\08b-red-mirrored.ps1
 #
 # Es idempotente: si una regla ya existe, la deja como esta.
 

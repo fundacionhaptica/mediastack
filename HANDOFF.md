@@ -4,7 +4,8 @@ Documento de traspaso: lo que está hecho, lo que está bloqueado y el siguiente
 exacto. Quien retome esto no necesita el historial de ninguna conversación previa.
 
 Máquina: **MINIPC-JRH**, 192.168.1.227 (Windows 11, Intel N150, 7,9 GB).
-NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `~/mediastack`.
+NAS: **192.168.1.205**. Repo de trabajo: **`~/mediastack` dentro de WSL**.
+`C:\claude\mediastack` está congelada y se borrará al terminar la instalación (CLAUDE.md §2).
 
 ---
 
@@ -41,9 +42,16 @@ Configuración que ya está puesta:
 - **Imágenes Docker ya descargadas** (~6,9 GB): `immich-server:v3`, `immich-app/postgres`,
   `valkey/valkey:9`, `deluan/navidrome`, `jellyfin/jellyfin`. Al desbloquear la fase 3, los
   `docker compose up -d` arrancan sin descargar nada.
-- Git: `C:\claude\mediastack` tiene el remoto `github`; `~/mediastack` tiene `origin` →
-  GitHub y `windows` → `/mnt/c/claude/mediastack`. El flujo es: **editar en
-  `C:\claude\mediastack` → commit → push a github → `git -C ~/mediastack pull`**.
+- Git, **desde el 2026-09-01**: la copia que commitea es `~/mediastack` (remoto `origin` →
+  GitHub). El flujo es **editar en WSL → commit → push**, sin intermediarios.
+  `C:\claude\mediastack` (remoto `github`, y el remoto `windows` de la copia de WSL que
+  apunta a ella) queda congelada hasta que Jaime la borre.
+
+  **Borrarla no rompe el arranque automático**, que es el miedo razonable: la tarea programada
+  de la fase 6 ejecuta `C:\Windows\System32\wsl.exe` con `/home/jaime/mediastack/scripts/boot-mediastack.sh`
+  — una ruta de dentro de WSL. Comprobado en `wsl/06-arranque-automatico.ps1`. Lo que sí hay
+  que mirar antes de borrar es que no queden cambios sin subir:
+  `git -C /mnt/c/claude/mediastack status`.
 
 ---
 

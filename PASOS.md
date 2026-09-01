@@ -43,10 +43,14 @@ creó con `--disabled-password` y `sudo` desde dentro pide una contraseña que n
 El login abre una URL: desde WSL se abre en el navegador de Windows por el interop.
 
 Al arrancar en `~/mediastack`, Claude Code lee el `CLAUDE.md` del repo y hereda sus reglas
-duras. **Ojo con la regla 2** («git primero, pull después»): esa copia es de solo pull, así que
-lo que se ejecuta y verifica va aquí, pero los cambios del repo siguen su camino de siempre.
-Si algún día se decide que la copia de WSL sea la que commitea, hay que cambiar la regla 2 del
-`CLAUDE.md` en el mismo commit, no darlo por sabido.
+duras. Desde el 2026-09-01 **esta copia es la que commitea y empuja** (regla 2), y
+`C:\claude\mediastack` queda congelada hasta que Jaime la borre al terminar la instalación.
+No hay que sincronizar nada a mano entre las dos: la de Windows ya no se toca.
+
+Excepción por pura cronología: `wsl/00-inventario.ps1`, `01-instalar-wsl2.ps1` y
+`02-configurar-ubuntu.ps1` se ejecutan **antes de que Ubuntu exista**, así que sus cabeceras
+siguen apuntando a una ruta de Windows. Solo hacen falta para reconstruir el equipo desde cero,
+y en ese caso lo que hay es un clon nuevo, no esta copia congelada.
 
 ---
 
@@ -314,11 +318,15 @@ sesión iniciada y **sin guardar la contraseña**. S4U no da credenciales de red
 que aquí da igual porque los montajes del NAS los hace Linux dentro de WSL.
 
 ```powershell
-PS> powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\06-arranque-automatico.ps1
+PS> powershell -ExecutionPolicy Bypass -File \\wsl.localhost\Ubuntu-24.04\home\jaime\mediastack\wsl\06-arranque-automatico.ps1
 ```
 
 El script comprueba la elevación y que la distro pertenezca a ese usuario antes de registrar
-nada, y es idempotente.
+nada, y es idempotente. Ya se ejecutó el 2026-08-28; esto queda por si hay que rehacerlo.
+
+La tarea que registra ejecuta `C:\Windows\System32\wsl.exe` con una ruta **de dentro de
+WSL**, no del repo de Windows. Por eso borrar `C:\claude\mediastack` (CLAUDE.md §2) no rompe
+el arranque automático.
 
 ### Qué levanta
 
@@ -485,8 +493,14 @@ reglas, WSL comparte la IP pero el firewall corta, y **el síntoma es idéntico 
 cambiado nada** — es el fallo que más tiempo hace perder aquí.
 
 ```powershell
-PS> powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\08b-red-mirrored.ps1
+PS> powershell -ExecutionPolicy Bypass -File \\wsl.localhost\Ubuntu-24.04\home\jaime\mediastack\wsl\08b-red-mirrored.ps1
 ```
+
+> Los `.ps1` de este repo se lanzan desde Windows pero **viven en la copia de WSL**, que es la
+> buena (regla 2 del `CLAUDE.md`). Se llega a ellos por `\\wsl.localhost\Ubuntu-24.04\...`.
+> Si Windows se niega a ejecutar desde esa ruta por considerarla de zona no confiable, cópialo
+> antes: `copy \\wsl.localhost\Ubuntu-24.04\home\jaime\mediastack\wsl\08b-red-mirrored.ps1 %TEMP%`
+> y ejecútalo desde ahí.
 
 Abre solo 2283, 4533 y 8096. Homepage (3000) se queda fuera a propósito: publica en
 `127.0.0.1` y se sirve por Caddy.
