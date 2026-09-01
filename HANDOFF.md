@@ -378,4 +378,24 @@ PS> Get-NetFirewallRule -DisplayName *2283* | Format-List DisplayName,Enabled,Di
 tailnet, también dentro de Ubuntu, así que todo termina en el mismo sitio que los contenedores
 y no necesita exposición a la LAN. Es justo la razón por la que `PLAN.md` §6 puso Tailscale
 dentro de WSL y descartó `netsh portproxy`. Lo único que sí rompe es la verificación de la
-fase 6 tal como estaba escrita — ver `PASOS.md` §6.
+fase 6 tal como estaba escrita — ya corregida en `PASOS.md` §6.
+
+### Decisión: red en modo espejo (Jaime, 2026-09-01)
+
+Aun así se quiere acceso desde la LAN, para no dar la vuelta por Internet o por el tailnet
+para ver algo que está en la habitación de al lado. Se hace con **`networkingMode=mirrored`**
+en `.wslconfig`, no con `netsh portproxy`.
+
+**Escrito y listo, pendiente de ejecutar** (runbook con verificación y vuelta atrás en
+`PASOS.md` fase 8b):
+
+1. Parar el stack.
+2. `networkingMode=mirrored` en `C:\Users\Admin\.wslconfig` + `wsl --shutdown`.
+3. `wsl/08b-red-mirrored.ps1` como administrador — abre 2283, 4533 y 8096 en el firewall de
+   Hyper-V. **Sin esto el síntoma es idéntico a no haber cambiado nada**, y es donde se pierde
+   la tarde.
+4. Arrancar y pasar `verificar.sh`, mirando sobre todo los cuatro montajes del NAS.
+
+Lo que hay que vigilar: cambia la red de WSL entera. Los montajes NFS son lo que más se puede
+resentir, aunque lo probable es lo contrario — el NAT era justo lo que obligaba a
+`vers=3,nolock`. El `fstab` no se toca en el mismo paso.

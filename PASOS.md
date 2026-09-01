@@ -332,6 +332,10 @@ Esperar 5 minutos **sin tocar el teclado ni iniciar sesión a mano**.
 > responde nadie ni con el stack perfectamente arrancado. Comprobado el 2026-09-01 sondeando
 > desde el NAS — ningún equipo del `192.168.1.0/24` sirve 2283/4533/8096, con el mini PC
 > encendido. Que falle eso no dice nada sobre el arranque automático.
+>
+> **Salvo que ya hayas hecho la fase 8b** (red en modo espejo): a partir de ahí sí responde
+> desde la LAN, y entonces `curl -I http://192.168.1.227:2283` desde otro equipo vuelve a ser
+> la prueba buena, la más limpia de todas.
 
 Pasados los cinco minutos, ya puedes iniciar sesión: lo que se comprueba es que el stack
 llevaba rato en pie **antes** de que tú tocaras nada, y para eso valen las marcas de tiempo.
@@ -412,6 +416,82 @@ aparece `vaapi`. Si el transcode falla → volver a comentar. Sin dramas.
 **8c. Miniaturas de Immich en SSD local: descartado en este equipo.** Acelera la línea de
 tiempo, pero el SSD es de 128 GB y las miniaturas son un 10-20% de la biblioteca. El espacio
 manda sobre la velocidad: se quedan en el NAS.
+
+---
+
+## FASE 8b — Ver los servicios desde la LAN (red en modo espejo)
+
+**Decisión de Jaime, 2026-09-01.** Hasta aquí los contenedores solo respondían en `localhost`
+del propio Windows: WSL2 sale por NAT y su reenvío automático no cubre la red local, así que
+desde el portátil o la tele de casa no contestaba nadie en `192.168.1.227`. Se resuelve
+poniendo la red de WSL en **modo espejo**, no con `netsh portproxy` (descartado en `PLAN.md`
+§6 por frágil: la IP de WSL cambia en cada arranque).
+
+> ⚠️ Esto cambia la red de WSL entera. Se hace **con el stack parado** y se verifican los
+> montajes del NAS después, porque son lo que más se puede resentir.
+
+### 1. Parar el stack
+
+```bash
+$ cd ~/mediastack/immich    && docker compose down
+$ cd ~/mediastack/navidrome && docker compose down
+$ cd ~/mediastack/jellyfin  && docker compose down
+```
+
+### 2. Modo espejo en `.wslconfig`
+
+En Windows, añadir a `C:\Users\Admin\.wslconfig`, dentro de `[wsl2]` (está ya en
+`wsl/.wslconfig.example`, con el porqué):
+
+```ini
+networkingMode=mirrored
+```
+
+```powershell
+PS> wsl --shutdown          # sin esto no se aplica
+```
+
+### 3. Abrir los puertos en el firewall
+
+En modo espejo el tráfico hacia WSL pasa por el firewall de Windows como cualquier otro. Sin
+reglas, WSL comparte la IP pero el firewall corta, y **el síntoma es idéntico a no haber
+cambiado nada** — es el fallo que más tiempo hace perder aquí.
+
+```powershell
+PS> powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\08b-red-mirrored.ps1
+```
+
+Abre solo 2283, 4533 y 8096. Homepage (3000) se queda fuera a propósito: publica en
+`127.0.0.1` y se sirve por Caddy.
+
+### 4. Levantar y comprobar
+
+```bash
+$ bash ~/mediastack/scripts/arrancar-stack.sh
+```
+
+**VERIFICACIÓN 8b:**
+
+- [ ] `bash ~/mediastack/scripts/verificar.sh` sale con **0 fallos** — esto cubre los cuatro
+      montajes del NAS, que es lo que había que vigilar.
+- [ ] Desde **otro equipo** de la red: `curl -I http://192.168.1.227:2283` responde, y también
+      `:4533` y `:8096`.
+- [ ] Desde el propio mini PC, `http://localhost:2283` sigue respondiendo.
+- [ ] El backup nocturno sigue escribiendo: `bash ~/mediastack/scripts/backup-immich-db.sh` y
+      mirar que el volcado llega al NAS.
+
+### Si algo se rompe: vuelta atrás
+
+Quitar `networkingMode=mirrored` de `.wslconfig` y `wsl --shutdown`. Se vuelve al NAT de
+siempre; las reglas de firewall que dejó el script son inertes en ese modo y no estorban.
+
+### Efecto secundario bueno: NFS
+
+El NAT era justo lo que impedía que el NAS pudiera llamar de vuelta al cliente, y por eso los
+montajes van con `vers=3,nolock` (`wsl/fstab.snippet`). En modo espejo esa limitación
+desaparece y NFSv4.1 con bloqueo debería funcionar. **No se toca el `fstab` a la vez que
+esto**: un cambio cada vez, y el actual funciona. Queda apuntado por si algún día hace falta
+bloqueo de ficheros de verdad sobre el NAS.
 
 ---
 

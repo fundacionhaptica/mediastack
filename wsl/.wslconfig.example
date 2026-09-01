@@ -17,6 +17,28 @@ processors=3
 # en un pico de memoria. Va al SSD, que tiene sitio de sobra.
 swap=6GB
 
+# ---------------------------------------------------------------------------
+# RED EN MODO ESPEJO — decisión de Jaime, 2026-09-01
+# ---------------------------------------------------------------------------
+# Por defecto WSL2 sale por NAT detrás de Windows: los contenedores solo se
+# alcanzan desde 'localhost' del propio Windows, y desde otro equipo de la LAN
+# no responde nadie. Con 'mirrored', WSL comparte las interfaces y las IPs de
+# Windows, así que Immich, Navidrome y Jellyfin se ven desde toda la casa en
+# 192.168.1.227 sin 'netsh portproxy' (que este plan descartó por frágil).
+#
+# Requiere Windows 11 22H2+ y WSL 2.0+. Aquí: WSL 2.7.12. OK.
+#
+# Dos efectos secundarios que hay que saber:
+#  · El firewall de Windows pasa a filtrar el tráfico hacia WSL. Hay que abrir
+#    los puertos con reglas de Hyper-V: wsl/08b-red-mirrored.ps1 las pone.
+#  · Los servicios quedan expuestos a TODA la LAN. Es lo que se busca, pero por
+#    eso Homepage sigue publicando en 127.0.0.1:3000 y no en 0.0.0.0.
+#
+# Efecto secundario bueno: desaparece el NAT que impedía las callbacks de NFS.
+# Es lo que obligó a montar el NAS con vers=3,nolock (ver wsl/fstab.snippet).
+# NO se cambia el fstab a la vez que esto: un cambio cada vez.
+networkingMode=mirrored
+
 [experimental]
 # Devuelve al host la RAM que WSL deja de usar (si no, se queda "pegada" tras
 # un indexado grande de Immich).
