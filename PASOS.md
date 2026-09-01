@@ -393,31 +393,103 @@ manda sobre la velocidad: se quedan en el NAS.
 
 ## FASE 9 — Acceso desde fuera
 
+> Actualizada el 2026-09-01. La versión anterior de esta fase daba `videos.ruizespana.com`
+> apuntando a la IP de Tailscale: **eso ya no es así**. Desde la decisión del 2026-08-31
+> (`PLAN.md` §6, `oracle-vps/README.md`) el nombre es `pelis.` y tanto él como `fotos-vpn.`
+> son **públicos de verdad** detrás de una VM Oracle Always Free.
+
+**Nada de esta fase se toca hasta que `scripts/verificar.sh` salga con 0 fallos en la LAN.**
+
 **Nombres definitivos y cómo se publica cada uno:**
 
-| Hostname | Servicio | Cloudflare |
-|---|---|---|
-| `fotos.ruizespana.com` | Immich :2283 | Túnel, **proxy naranja** |
-| `musica.ruizespana.com` | Navidrome :4533 | Túnel, **proxy naranja** |
-| `videos.ruizespana.com` | Jellyfin :8096 | Registro A **solo DNS (gris)** → IP Tailscale |
-| `fotos-vpn.ruizespana.com` | Immich :2283 | Registro A **solo DNS (gris)** → IP Tailscale |
+| Hostname | Servicio | Cloudflare | Quién llega |
+|---|---|---|---|
+| `fotos.ruizespana.com` | Immich :2283 | Túnel, **proxy naranja** | cualquiera |
+| `musica.ruizespana.com` | Navidrome :4533 | Túnel, **proxy naranja** | cualquiera |
+| `pelis.ruizespana.com` | Jellyfin :8096 | A **solo DNS (gris)** → IP pública VM Oracle | cualquiera |
+| `fotos-vpn.ruizespana.com` | Immich :2283 | A **solo DNS (gris)** → IP pública VM Oracle | cualquiera |
+| `casa.ruizespana.com` | Homepage :3000 | A **solo DNS (gris)** → IP Tailscale del mini PC | solo tu tailnet |
 
-**Orden recomendado:**
+`fotos-vpn.` es la URL que se pone en la **app móvil de Immich**: no pasa por Cloudflare, así
+que los vídeos de más de 100 MB suben sin chocar con el límite del plan gratuito.
 
-1. **Tailscale primero** (`curl -fsSL https://tailscale.com/install.sh | sh` en WSL, o el
-   cliente de Windows). Anota la IP `100.x.y.z` que asigna al mini PC: es la que va en los dos
-   registros grises.
-2. **Registros DNS grises** para `videos` y `fotos-vpn` en la zona `ruizespana.com`.
-   En la app móvil de Immich se configura `https://fotos-vpn.ruizespana.com:2283` — así los
-   vídeos grandes suben sin chocar con el límite de 100 MB.
-3. **Cloudflare Tunnel** para `fotos` y `musica`. `cloudflared/docker-compose.yml` está listo;
-   leer los avisos de cabecera y `PLAN.md` §6 antes.
+---
+
+### 9a. Quitar `pelis.` del túnel (primero, antes de nada)
+
+Cloudflare Zero Trust → **Networks → Tunnels → MiniPC_Jaime** → *Public Hostnames* → borrar
+`pelis.ruizespana.com`. Es justo el tráfico de vídeo que no queremos por el proxy gratuito
+(`PLAN.md` §6, aviso 2). El túnel del **NAS** no se toca: es otro túnel, de otra máquina.
+
+### 9b. Tailscale dentro de Ubuntu (no en Windows)
+
+```bash
+PS> wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/wsl/09-tailscale.sh
+$  sudo tailscale up --hostname=minipc-jrh    # imprime una URL: ábrela e inicia sesión
+$  tailscale ip -4                            # anota la 100.x.y.z
+```
+
+El porqué de «dentro de Ubuntu» está en la cabecera del propio script y en `PLAN.md` §6:
+con `tailscaled` en Windows haría falta `netsh portproxy`, que se rompe con cada
+actualización de WSL.
+
+### 9c. Caddy y portal en el mini PC (`casa.`)
+
+```bash
+$ cd ~/mediastack/caddy && cp .env.example .env && nano .env
+#   TS_IP=100.x.y.z   ← la del paso 9b. Vacío = escucharía en TODAS las interfaces: no.
+#   CF_API_TOKEN=...  ← Cloudflare → My Profile → API Tokens → "Edit zone DNS",
+#                       acotado a ruizespana.com. Es un secreto: no va al repo.
+#   ACME_EMAIL=...
+#   El CF_API_TOKEN se puede meter sin que pase por pantalla ni por el historial:
+#   bash ~/mediastack/scripts/poner-token-cf.sh   (lo escribe en caddy/.env, modo 600)
+$ docker compose up -d --build      # se compila: la imagen oficial no trae el DNS de Cloudflare
+$ cd ~/mediastack/homepage && cp .env.example .env && docker compose up -d
+```
+
+Registro DNS: `casa` → A **gris** → la IP `100.x.y.z`.
+
+### 9d. VM Oracle para `pelis.` y `fotos-vpn.`
+
+Runbook completo, paso a paso de la consola de OCI incluido: **`oracle-vps/README.md`**.
+Resumen, para no perder el hilo:
+
+1. Crear la instancia Always Free (Ubuntu 24.04) y anotar su **IP pública**.
+2. Abrir **80/443 en el Security List** de la VCN — *y* dejar que `setup.sh` ponga `ufw`.
+   Son dos capas distintas y hacen falta las dos; es el fallo más común aquí.
+3. En la VM: `git clone`, y `sudo TAILSCALE_AUTHKEY=tskey-... ./setup.sh`.
+4. `cp .env.example .env` con `MINIPC_TS_IP` (la del paso 9b) y `ACME_EMAIL`, y
+   `docker compose up -d`.
+5. DNS: `pelis` y `fotos-vpn` → A **gris** → **IP pública de la VM** (sustituyen a lo que
+   hubiera; si se dejan en naranja, se pierde todo el sentido del montaje).
+
+### 9e. El túnel, al final
+
+`cloudflared/docker-compose.yml` está listo pero **sin levantar**, y `cloudflared/.env` con
+`TUNNEL_TOKEN` no existe todavía; hay que crearlo a mano (`scripts/poner-token-cf.sh` **no
+sirve aquí**: ese es para el `CF_API_TOKEN` de `caddy/.env`, que es otro token distinto).
+
+```bash
+$ cd ~/mediastack/cloudflared
+$ install -m 600 /dev/null .env && nano .env    # TUNNEL_TOKEN=...  (Zero Trust → el túnel)
+$ docker compose up -d
+```
+
+En el túnel solo quedan `fotos.` y `musica.` — `pelis.` se quitó en el paso 9a.
 
 **VERIFICACIÓN 9:**
 
-- [ ] Desde datos móviles (**Wi-Fi apagado**): la app de Immich sube una **foto**.
-- [ ] Desde datos móviles: la app de Immich sube un **vídeo de más de 100 MB**.
-      Si va por Cloudflare, esto **fallará** — es el comportamiento esperado, no un bug tuyo.
+- [ ] `tailscale status` en el mini PC lo ve como `minipc-jrh`, y desde el móvil con Tailscale
+      abre `https://casa.ruizespana.com` **con candado válido** (no aviso de certificado).
+- [ ] Desde la VM Oracle: `curl -sI http://<MINIPC_TS_IP>:8096/health` responde — si esto falla,
+      lo demás no puede funcionar y el problema es de Tailscale, no de Caddy.
+- [ ] Desde datos móviles (**Wi-Fi y Tailscale apagados**): `https://pelis.ruizespana.com` y
+      `https://fotos-vpn.ruizespana.com` cargan con certificado válido.
+- [ ] Desde datos móviles: la app de Immich apuntando a `https://fotos-vpn.ruizespana.com`
+      sube una **foto** y un **vídeo de más de 100 MB**. El vídeo es la prueba que importa:
+      es exactamente lo que fallaba por el túnel.
+- [ ] `https://fotos.ruizespana.com` y `https://musica.ruizespana.com` siguen abriendo por el
+      túnel.
 - [ ] El túnel del NAS (n8n, flota, erp, mcp) sigue funcionando igual: **no se ha tocado**.
 
 ---

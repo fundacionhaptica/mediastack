@@ -1,4 +1,4 @@
-# HANDOFF — estado del despliegue a 2026-08-27
+# HANDOFF — estado del despliegue a 2026-09-01
 
 Documento de traspaso: lo que está hecho, lo que está bloqueado y el siguiente comando
 exacto. Quien retome esto no necesita el historial de ninguna conversación previa.
@@ -169,24 +169,20 @@ wsl -d Ubuntu-24.04 -u root passwd jaime
 
 ---
 
-## Siguiente paso una vez desbloqueado
+## Siguiente paso
 
-```bash
-# FASE 3 — probar a mano ANTES de tocar /etc/fstab (el script monta, enseña y desmonta)
-wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/montar-nas.sh probar-nfs /volume1/foto
-#   o, por el plan B:
-wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/montar-nas.sh probar-cifs foto jaime
-# si se lee: poner la variante que toque de wsl/fstab.snippet en /etc/fstab,
-#            systemctl daemon-reload && mount -a
+Las fases 3, 5 y 7 están cerradas: los cinco contenedores arrancan y `verificar.sh` salió con
+**0 fallos** el 2026-08-28. Lo que queda, en este orden:
 
-# FASE 5 — Immich (todo preparado e imágenes descargadas)
-cd ~/mediastack/immich && docker compose up -d && docker compose logs -f immich-server
+1. **Asistentes iniciales** en el navegador (Immich, Jellyfin, Navidrome) — «Lo que queda» §3.
+   Sin esto no hay nada que publicar hacia fuera.
+2. **Cerrar la fase 6**: BIOS *Restore on AC Power Loss = Power On* y el reinicio en frío.
+3. **Fase 9 entera**, runbook actualizado en `PASOS.md` §9 (9a → 9e).
 
-# FASE 7 — el resto
-cd ~/mediastack/navidrome && docker compose up -d
-cd ~/mediastack/jellyfin  && docker compose up -d
+Para arrancar el stack a mano mientras tanto:
 
-bash ~/mediastack/scripts/verificar.sh   # tiene que salir 0 fallos
+```powershell
+wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/boot-mediastack.sh
 ```
 
 ## Fase 6 — hecha a medias, y el resto aplazado a propósito
@@ -316,6 +312,31 @@ no se levanta (así lo dice el propio compose).
 
 ## Estado de `scripts/verificar.sh`
 
-7 fallos, y son exactamente los de las fases pendientes: 4 montajes del NAS y 3 puertos HTTP de
-contenedores que aún no existen. Entorno WSL, Docker y las reglas de almacenamiento (Postgres
-en ext4 local) salen en verde.
+**0 fallos** en la última ejecución conocida en el mini PC (2026-08-28, con los cinco
+contenedores en marcha). Entorno WSL, Docker, montajes del NAS y las reglas de almacenamiento
+(Postgres en ext4 local), todo en verde.
+
+Se ejecuta **dentro de Ubuntu**, en la máquina real — no vale desde otro sitio:
+
+```bash
+bash ~/mediastack/scripts/verificar.sh
+```
+
+### Comprobar el estado del mini PC en remoto
+
+Desde una sesión sin acceso a la LAN de casa, el NAS sirve de punto de observación (está en la
+misma red). Un sondeo de puertos vale para saber si el stack está vivo:
+
+```bash
+for p in 2283 4533 8096; do
+  printf '%s -> ' $p
+  curl -s -o /dev/null -w '%{http_code}\n' --max-time 6 http://192.168.1.227:$p/
+done
+```
+
+⚠️ El 2026-09-01 esto dio `000` en los tres, y tampoco respondían 445/135/3389: **el mini PC
+estaba apagado o fuera de la red**, no es que el stack se hubiera caído. Ojo también con la
+otra lectura posible: los contenedores viven en WSL2, así que responder en `localhost` del
+propio Windows no garantiza responder en `192.168.1.227` desde la LAN. Si el equipo está
+encendido y aun así da `000`, comprobar eso antes de tocar nada — y es justo lo que hay que
+tener resuelto para la prueba de reinicio en frío de la fase 6.
