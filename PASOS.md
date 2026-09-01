@@ -21,6 +21,33 @@ Pensado para ejecutarse **con Claude Code**, fase a fase. Cada fase tiene:
 no en Windows. Así ve el mismo sistema de ficheros que los contenedores y puede verificar de
 verdad lo que está montando.
 
+### Instalar Claude Code dentro de Ubuntu
+
+Decidido el 2026-09-01, después de comprobar que una sesión en la nube no alcanza este equipo:
+no está en la LAN de casa y no conserva nada entre sesiones. Las alternativas para dárselo —
+SSH abierto a Internet, o un MCP de ejecución de comandos publicado por el túnel — son mucha
+superficie nueva en la máquina donde están las fotos de la familia. Trabajar desde dentro no
+cuesta nada de eso.
+
+```bash
+$ curl -fsSL https://claude.ai/install.sh | bash   # instalador nativo, sirve para WSL
+$ exec $SHELL -l                                   # para que ~/.local/bin entre en el PATH
+$ claude --version
+$ cd ~/mediastack && claude                        # la primera vez pide iniciar sesión
+```
+
+No hace falta `sudo`: instala en `~/.local/bin`. Viene bien, porque en este equipo `jaime` se
+creó con `--disabled-password` y `sudo` desde dentro pide una contraseña que no existe
+(`HANDOFF.md` lo explica y da la vuelta por `wsl.exe -u root`).
+
+El login abre una URL: desde WSL se abre en el navegador de Windows por el interop.
+
+Al arrancar en `~/mediastack`, Claude Code lee el `CLAUDE.md` del repo y hereda sus reglas
+duras. **Ojo con la regla 2** («git primero, pull después»): esa copia es de solo pull, así que
+lo que se ejecuta y verifica va aquí, pero los cambios del repo siguen su camino de siempre.
+Si algún día se decide que la copia de WSL sea la que commitea, hay que cambiar la regla 2 del
+`CLAUDE.md` en el mismo commit, no darlo por sabido.
+
 ---
 
 ## FASE 0 — Inventario (solo lectura, no cambia nada)

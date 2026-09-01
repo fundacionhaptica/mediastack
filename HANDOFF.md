@@ -172,17 +172,32 @@ wsl -d Ubuntu-24.04 -u root passwd jaime
 
 ---
 
-## Siguiente paso
+## Siguiente paso: el trabajo se retoma DESDE el mini PC
+
+Decisión de Jaime, 2026-09-01. Las sesiones de Claude Code en la nube pueden llevar el repo,
+pero no alcanzan esta máquina: no están en la LAN y no conservan nada entre sesiones. Se
+descartaron SSH abierto a Internet y un MCP de ejecución de comandos por el túnel — demasiada
+superficie nueva en la máquina donde viven las fotos. Se instala Claude Code **dentro de
+Ubuntu/WSL**: instrucciones en `PASOS.md`, sección «Instalar Claude Code dentro de Ubuntu».
 
 Las fases 3, 5 y 7 están cerradas: los cinco contenedores arrancan y `verificar.sh` salió con
 **0 fallos** el 2026-08-28. Lo que queda, en este orden:
 
-1. **Asistentes iniciales** en el navegador (Immich, Jellyfin, Navidrome) — «Lo que queda» §3.
-   Sin esto no hay nada que publicar hacia fuera.
-2. **Cerrar la fase 6**: BIOS *Restore on AC Power Loss = Power On* y el reinicio en frío.
-3. **Fase 9 entera**, runbook actualizado en `PASOS.md` §9 (9a → 9e).
+1. **Fase 8b — red en modo espejo**, para que el stack se vea desde la LAN. Va primero porque
+   arregla de paso la verificación de la fase 6, que sin esto no se puede hacer bien.
+2. **Asistentes iniciales** (Immich, Jellyfin, Navidrome) — «Lo que queda» §3. Sin usuarios no
+   hay nada que publicar hacia fuera. Hasta la fase 8b, en `localhost` del propio mini PC.
+3. **Cerrar la fase 6**: BIOS *Restore on AC Power Loss = Power On* y el reinicio en frío.
+4. **Fase 9 entera**: `PASOS.md` §9, pasos 9a → 9e.
 
-Para arrancar el stack a mano mientras tanto:
+Antes de nada, en la sesión que se abra en el mini PC:
+
+```bash
+git -C ~/mediastack pull
+bash ~/mediastack/scripts/verificar.sh     # foto real del estado, que desde fuera no se puede
+```
+
+Para arrancar el stack a mano si hiciera falta:
 
 ```powershell
 wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/boot-mediastack.sh
