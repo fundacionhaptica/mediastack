@@ -4,7 +4,8 @@ Documento de traspaso: lo que está hecho, lo que está bloqueado y el siguiente
 exacto. Quien retome esto no necesita el historial de ninguna conversación previa.
 
 Máquina: **MINIPC-JRH**, 192.168.1.227 (Windows 11, Intel N150, 7,9 GB).
-NAS: **192.168.1.205**. Repo en Windows: `C:\claude\mediastack`. Copia en WSL: `~/mediastack`.
+NAS: **192.168.1.205**. Repo de trabajo: **`~/mediastack` dentro de WSL**.
+`C:\claude\mediastack` está congelada y se borrará al terminar la instalación (CLAUDE.md §2).
 
 ---
 
@@ -41,9 +42,16 @@ Configuración que ya está puesta:
 - **Imágenes Docker ya descargadas** (~6,9 GB): `immich-server:v3`, `immich-app/postgres`,
   `valkey/valkey:9`, `deluan/navidrome`, `jellyfin/jellyfin`. Al desbloquear la fase 3, los
   `docker compose up -d` arrancan sin descargar nada.
-- Git: `C:\claude\mediastack` tiene el remoto `github`; `~/mediastack` tiene `origin` →
-  GitHub y `windows` → `/mnt/c/claude/mediastack`. El flujo es: **editar en
-  `C:\claude\mediastack` → commit → push a github → `git -C ~/mediastack pull`**.
+- Git, **desde el 2026-09-01**: la copia que commitea es `~/mediastack` (remoto `origin` →
+  GitHub). El flujo es **editar en WSL → commit → push**, sin intermediarios.
+  `C:\claude\mediastack` (remoto `github`, y el remoto `windows` de la copia de WSL que
+  apunta a ella) queda congelada hasta que Jaime la borre.
+
+  **Borrarla no rompe el arranque automático**, que es el miedo razonable: la tarea programada
+  de la fase 6 ejecuta `C:\Windows\System32\wsl.exe` con `/home/jaime/mediastack/scripts/boot-mediastack.sh`
+  — una ruta de dentro de WSL. Comprobado en `wsl/06-arranque-automatico.ps1`. Lo que sí hay
+  que mirar antes de borrar es que no queden cambios sin subir:
+  `git -C /mnt/c/claude/mediastack status`.
 
 ---
 
@@ -128,11 +136,14 @@ Documentación de Immich: docs.immich.app/administration/system-integrity#folder
 
 ### 3. Asistentes iniciales, a mano en el navegador
 
-- **Immich** `http://192.168.1.227:2283` — crear el usuario admin y, en *Administración →
+**En el navegador del propio mini PC**, con `localhost`: desde otro equipo de la LAN estos
+puertos no responden (ver «Estado a 2026-09-01» al final de este documento).
+
+- **Immich** `http://localhost:2283` — crear el usuario admin y, en *Administración →
   Bibliotecas externas*, añadir `/mnt/nas/fotos-historico`.
-- **Jellyfin** `http://192.168.1.227:8096` — asistente, y bibliotecas apuntando a `/media`
+- **Jellyfin** `http://localhost:8096` — asistente, y bibliotecas apuntando a `/media`
   (la ruta **dentro** del contenedor, no la de WSL).
-- **Navidrome** `http://192.168.1.227:4533` — crear usuario. Ya tiene 276+ canciones.
+- **Navidrome** `http://localhost:4533` — crear usuario. Ya tiene 276+ canciones.
 
 ### 4. Vigilar la memoria de `immich_server`
 
@@ -169,17 +180,32 @@ wsl -d Ubuntu-24.04 -u root passwd jaime
 
 ---
 
-## Siguiente paso
+## Siguiente paso: el trabajo se retoma DESDE el mini PC
+
+Decisión de Jaime, 2026-09-01. Las sesiones de Claude Code en la nube pueden llevar el repo,
+pero no alcanzan esta máquina: no están en la LAN y no conservan nada entre sesiones. Se
+descartaron SSH abierto a Internet y un MCP de ejecución de comandos por el túnel — demasiada
+superficie nueva en la máquina donde viven las fotos. Se instala Claude Code **dentro de
+Ubuntu/WSL**: instrucciones en `PASOS.md`, sección «Instalar Claude Code dentro de Ubuntu».
 
 Las fases 3, 5 y 7 están cerradas: los cinco contenedores arrancan y `verificar.sh` salió con
 **0 fallos** el 2026-08-28. Lo que queda, en este orden:
 
-1. **Asistentes iniciales** en el navegador (Immich, Jellyfin, Navidrome) — «Lo que queda» §3.
-   Sin esto no hay nada que publicar hacia fuera.
-2. **Cerrar la fase 6**: BIOS *Restore on AC Power Loss = Power On* y el reinicio en frío.
-3. **Fase 9 entera**, runbook actualizado en `PASOS.md` §9 (9a → 9e).
+1. **Fase 8b — red en modo espejo**, para que el stack se vea desde la LAN. Va primero porque
+   arregla de paso la verificación de la fase 6, que sin esto no se puede hacer bien.
+2. **Asistentes iniciales** (Immich, Jellyfin, Navidrome) — «Lo que queda» §3. Sin usuarios no
+   hay nada que publicar hacia fuera. Hasta la fase 8b, en `localhost` del propio mini PC.
+3. **Cerrar la fase 6**: BIOS *Restore on AC Power Loss = Power On* y el reinicio en frío.
+4. **Fase 9 entera**: `PASOS.md` §9, pasos 9a → 9e.
 
-Para arrancar el stack a mano mientras tanto:
+Antes de nada, en la sesión que se abra en el mini PC:
+
+```bash
+git -C ~/mediastack pull
+bash ~/mediastack/scripts/verificar.sh     # foto real del estado, que desde fuera no se puede
+```
+
+Para arrancar el stack a mano si hiciera falta:
 
 ```powershell
 wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/boot-mediastack.sh
@@ -198,7 +224,9 @@ está garantizado:**
 1. **BIOS/UEFI → *Restore on AC Power Loss = Power On***. Sin esto, tras un corte de luz el
    mini PC no se enciende siquiera, y la tarea programada da igual.
 2. **Reinicio en frío**, la única prueba que vale. Reiniciar, esperar 5 minutos sin tocar el
-   teclado ni iniciar sesión, y desde otro equipo `curl -I http://192.168.1.227:2283`.
+   teclado ni iniciar sesión, y comprobar por marcas de tiempo que el stack ya estaba en pie
+   antes de que iniciaras sesión — el runbook actualizado está en `PASOS.md` §6. **No** sirve
+   `curl` desde otro equipo de la LAN: esos puertos no salen de WSL.
 
 Mientras tanto, si el equipo se apaga, el stack se levanta con:
 
@@ -325,18 +353,72 @@ bash ~/mediastack/scripts/verificar.sh
 ### Comprobar el estado del mini PC en remoto
 
 Desde una sesión sin acceso a la LAN de casa, el NAS sirve de punto de observación (está en la
-misma red). Un sondeo de puertos vale para saber si el stack está vivo:
+misma red). **Ojo con el método**: el contenedor del MCP del NAS corre `dash`, no `bash`, así
+que `/dev/tcp/host/puerto` **no existe** ahí y falla siempre en silencio — da «cerrado» para
+todo, incluidos los puertos que están abiertos. Un sondeo hecho así el 2026-09-01 llevó a
+concluir, mal, que el mini PC estaba apagado.
+
+Lo que sí funciona es `curl`, y siempre **validándolo primero contra el NAS**, que sabemos vivo:
 
 ```bash
+# ¿responde HTTP?  (000 = no contesta)
 for p in 2283 4533 8096; do
   printf '%s -> ' $p
-  curl -s -o /dev/null -w '%{http_code}\n' --max-time 6 http://192.168.1.227:$p/
+  curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 http://192.168.1.227:$p/
 done
+
+# ¿está el equipo encendido?  El código de salida de curl distingue lo que el
+# código HTTP no puede. Validar el método contra el NAS antes de creerse nada:
+#   192.168.1.205:445  -> 28  (abierto, no habla HTTP)
+#   192.168.1.205:9999 -> 7   (cerrado)
+curl -s -o /dev/null --connect-timeout 4 --max-time 6 http://192.168.1.227:445/; echo $?
 ```
 
-⚠️ El 2026-09-01 esto dio `000` en los tres, y tampoco respondían 445/135/3389: **el mini PC
-estaba apagado o fuera de la red**, no es que el stack se hubiera caído. Ojo también con la
-otra lectura posible: los contenedores viven en WSL2, así que responder en `localhost` del
-propio Windows no garantiza responder en `192.168.1.227` desde la LAN. Si el equipo está
-encendido y aun así da `000`, comprobar eso antes de tocar nada — y es justo lo que hay que
-tener resuelto para la prueba de reinicio en frío de la fase 6.
+| Código de salida | Significa |
+|---|---|
+| `7` | Conexión rechazada o host inalcanzable |
+| `28` | Timeout: puerto filtrado, o el equipo no está |
+| `52` / `56` | **Conectó**: hay alguien al otro lado. El equipo está encendido |
+
+### Estado a 2026-09-01: encendido, pero WSL no se ve desde la LAN
+
+`445` da `56` (conecta y corta) → **el mini PC está encendido y en la red**. Pero `2283`, `4533`
+y `8096` dan timeout, y un barrido de `192.168.1.0/24` no encuentra esos puertos en **ninguna**
+IP: no es que haya cambiado de IP.
+
+La explicación más probable es la de siempre con WSL2: los contenedores escuchan dentro de
+Ubuntu, y el reenvío automático de WSL2 solo cubre **`localhost` del propio Windows**. Desde
+otro equipo de la LAN no hay nada que responda, aunque el stack esté perfectamente arrancado.
+Para confirmarlo, en el mini PC:
+
+```powershell
+PS> curl.exe -I http://localhost:2283          # si responde aquí, el stack está bien
+PS> netsh interface portproxy show v4tov4      # ¿hay reenvío a la LAN? (esperado: vacío)
+PS> Get-NetFirewallRule -DisplayName *2283* | Format-List DisplayName,Enabled,Direction,Action
+```
+
+**Esto no bloquea la fase 9**: Tailscale corre *dentro* de Ubuntu y Caddy escucha en la IP del
+tailnet, también dentro de Ubuntu, así que todo termina en el mismo sitio que los contenedores
+y no necesita exposición a la LAN. Es justo la razón por la que `PLAN.md` §6 puso Tailscale
+dentro de WSL y descartó `netsh portproxy`. Lo único que sí rompe es la verificación de la
+fase 6 tal como estaba escrita — ya corregida en `PASOS.md` §6.
+
+### Decisión: red en modo espejo (Jaime, 2026-09-01)
+
+Aun así se quiere acceso desde la LAN, para no dar la vuelta por Internet o por el tailnet
+para ver algo que está en la habitación de al lado. Se hace con **`networkingMode=mirrored`**
+en `.wslconfig`, no con `netsh portproxy`.
+
+**Escrito y listo, pendiente de ejecutar** (runbook con verificación y vuelta atrás en
+`PASOS.md` fase 8b):
+
+1. Parar el stack.
+2. `networkingMode=mirrored` en `C:\Users\Admin\.wslconfig` + `wsl --shutdown`.
+3. `wsl/08b-red-mirrored.ps1` como administrador — abre 2283, 4533 y 8096 en el firewall de
+   Hyper-V. **Sin esto el síntoma es idéntico a no haber cambiado nada**, y es donde se pierde
+   la tarde.
+4. Arrancar y pasar `verificar.sh`, mirando sobre todo los cuatro montajes del NAS.
+
+Lo que hay que vigilar: cambia la red de WSL entera. Los montajes NFS son lo que más se puede
+resentir, aunque lo probable es lo contrario — el NAT era justo lo que obligaba a
+`vers=3,nolock`. El `fstab` no se toca en el mismo paso.

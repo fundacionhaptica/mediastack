@@ -12,8 +12,14 @@ Este repo es **la única fuente de verdad** de la configuración.
 
 1. **No borrar, mover ni reorganizar** ningún fichero o carpeta del NAS ni del PC sin
    confirmación explícita de Jaime. Sin excepciones, ni "para limpiar", ni "es temporal".
-2. **Git primero, pull después.** Los cambios se hacen en el repo, se commitean y se hace
-   `git pull` en el mini PC. Nunca editar en el mini PC y commitear desde ahí.
+2. **Una sola copia commitea.** Desde el 2026-09-01 esa copia es **`~/mediastack` dentro de
+   WSL**, que es donde corre Claude Code y donde se puede verificar de verdad lo que se cambia.
+   `C:\claude\mediastack` queda **congelada**: no se edita ni se commitea desde ahí, y
+   desaparece cuando la instalación esté terminada (decisión de Jaime; el borrado lo hace él,
+   y antes hay que comprobar que no le queda nada sin commitear:
+   `git -C /mnt/c/claude/mediastack status`).
+   Lo que no cambia es el fondo de la regla: **nunca dos checkouts divergiendo**. Antes la
+   fuente era Windows y WSL solo hacía pull; ahora es al revés.
 3. **Ningún secreto en el repo.** `.env`, tokens de túnel, credenciales SMB: fuera. Si
    encuentras uno commiteado, avisa y rota, no lo dejes pasar.
 4. **`immich/docker-compose.yml` no se edita jamás.** Es el fichero oficial de la release.

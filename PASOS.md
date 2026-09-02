@@ -21,6 +21,37 @@ Pensado para ejecutarse **con Claude Code**, fase a fase. Cada fase tiene:
 no en Windows. Así ve el mismo sistema de ficheros que los contenedores y puede verificar de
 verdad lo que está montando.
 
+### Instalar Claude Code dentro de Ubuntu
+
+Decidido el 2026-09-01, después de comprobar que una sesión en la nube no alcanza este equipo:
+no está en la LAN de casa y no conserva nada entre sesiones. Las alternativas para dárselo —
+SSH abierto a Internet, o un MCP de ejecución de comandos publicado por el túnel — son mucha
+superficie nueva en la máquina donde están las fotos de la familia. Trabajar desde dentro no
+cuesta nada de eso.
+
+```bash
+$ curl -fsSL https://claude.ai/install.sh | bash   # instalador nativo, sirve para WSL
+$ exec $SHELL -l                                   # para que ~/.local/bin entre en el PATH
+$ claude --version
+$ cd ~/mediastack && claude                        # la primera vez pide iniciar sesión
+```
+
+No hace falta `sudo`: instala en `~/.local/bin`. Viene bien, porque en este equipo `jaime` se
+creó con `--disabled-password` y `sudo` desde dentro pide una contraseña que no existe
+(`HANDOFF.md` lo explica y da la vuelta por `wsl.exe -u root`).
+
+El login abre una URL: desde WSL se abre en el navegador de Windows por el interop.
+
+Al arrancar en `~/mediastack`, Claude Code lee el `CLAUDE.md` del repo y hereda sus reglas
+duras. Desde el 2026-09-01 **esta copia es la que commitea y empuja** (regla 2), y
+`C:\claude\mediastack` queda congelada hasta que Jaime la borre al terminar la instalación.
+No hay que sincronizar nada a mano entre las dos: la de Windows ya no se toca.
+
+Excepción por pura cronología: `wsl/00-inventario.ps1`, `01-instalar-wsl2.ps1` y
+`02-configurar-ubuntu.ps1` se ejecutan **antes de que Ubuntu exista**, así que sus cabeceras
+siguen apuntando a una ruta de Windows. Solo hacen falta para reconstruir el equipo desde cero,
+y en ese caso lo que hay es un clon nuevo, no esta copia congelada.
+
 ---
 
 ## FASE 0 — Inventario (solo lectura, no cambia nada)
@@ -229,7 +260,8 @@ $ docker compose logs -f immich-server     # Ctrl+C cuando diga que escucha en 2
 > deliberado: con 7,9 GB de RAM no cabe en horario normal (ver `PLAN.md` §3 y el anexo ML
 > al final de este documento).
 
-Después, en `http://192.168.1.227:2283`:
+Después, en el navegador **del propio mini PC**, en `http://localhost:2283` (desde otro equipo
+de la LAN no responde: ver el aviso de la fase 6):
 
 1. Crear el usuario administrador (el primero que entra es admin).
 2. Administración → Ajustes → **Machine Learning** → *desactivar*. Si se queda activo con el
@@ -286,11 +318,15 @@ sesión iniciada y **sin guardar la contraseña**. S4U no da credenciales de red
 que aquí da igual porque los montajes del NAS los hace Linux dentro de WSL.
 
 ```powershell
-PS> powershell -ExecutionPolicy Bypass -File C:\claude\mediastack\wsl\06-arranque-automatico.ps1
+PS> powershell -ExecutionPolicy Bypass -File \\wsl.localhost\Ubuntu-24.04\home\jaime\mediastack\wsl\06-arranque-automatico.ps1
 ```
 
 El script comprueba la elevación y que la distro pertenezca a ese usuario antes de registrar
-nada, y es idempotente.
+nada, y es idempotente. Ya se ejecutó el 2026-08-28; esto queda por si hay que rehacerlo.
+
+La tarea que registra ejecuta `C:\Windows\System32\wsl.exe` con una ruta **de dentro de
+WSL**, no del repo de Windows. Por eso borrar `C:\claude\mediastack` (CLAUDE.md §2) no rompe
+el arranque automático.
 
 ### Qué levanta
 
@@ -323,16 +359,43 @@ Y luego la prueba de verdad:
 PS> Restart-Computer
 ```
 
-Esperar 5 minutos **sin tocar el teclado ni iniciar sesión a mano**, y desde otro equipo:
+Esperar 5 minutos **sin tocar el teclado ni iniciar sesión a mano**.
 
-```bash
-$ curl -I http://192.168.1.227:2283
+> ⚠️ **`curl -I http://192.168.1.227:2283` desde otro equipo NO vale como prueba**, aunque sea
+> lo que pedía este runbook hasta el 2026-09-01. Los contenedores escuchan dentro de Ubuntu y
+> el reenvío automático de WSL2 solo cubre `localhost` **del propio Windows**: desde la LAN no
+> responde nadie ni con el stack perfectamente arrancado. Comprobado el 2026-09-01 sondeando
+> desde el NAS — ningún equipo del `192.168.1.0/24` sirve 2283/4533/8096, con el mini PC
+> encendido. Que falle eso no dice nada sobre el arranque automático.
+>
+> **Salvo que ya hayas hecho la fase 8b** (red en modo espejo): a partir de ahí sí responde
+> desde la LAN, y entonces `curl -I http://192.168.1.227:2283` desde otro equipo vuelve a ser
+> la prueba buena, la más limpia de todas.
+
+Pasados los cinco minutos, ya puedes iniciar sesión: lo que se comprueba es que el stack
+llevaba rato en pie **antes** de que tú tocaras nada, y para eso valen las marcas de tiempo.
+
+```powershell
+PS> Get-CimInstance Win32_OperatingSystem | Select-Object LastBootUpTime
+PS> wsl -d Ubuntu-24.04 -- docker ps --format '{{.Names}}\t{{.Status}}'
+PS> wsl -d Ubuntu-24.04 -- tail -40 /var/log/mediastack-boot.log
 ```
 
-- [ ] Immich responde tras un reinicio en frío sin intervención humana.
+- [ ] El `Status` de los contenedores dice `Up N minutes`, coherente con `LastBootUpTime` y
+      **anterior** al momento en que iniciaste sesión. Eso es lo que prueba que arrancó solo.
 - [ ] `/var/log/mediastack-boot.log` muestra el arranque, con la marca de tiempo del reinicio.
 - [ ] Los montajes del NAS están puestos tras el reinicio (`mount | grep 192.168.1.205`).
 - [ ] `bash ~/mediastack/scripts/verificar.sh` sale con 0 fallos.
+
+Y la prueba **desde otro equipo**, la que de verdad convence, queda disponible en cuanto esté
+la fase 9b (Tailscale): desde cualquier dispositivo del tailnet,
+
+```bash
+$ curl -I http://100.x.y.z:2283      # la IP de 'tailscale ip -4' en el mini PC
+```
+
+Eso sí funciona sin exponer nada a la LAN, porque `tailscaled` corre **dentro** de Ubuntu, en
+el mismo sitio que los contenedores (`PLAN.md` §6).
 
 ---
 
@@ -388,6 +451,88 @@ aparece `vaapi`. Si el transcode falla → volver a comentar. Sin dramas.
 **8c. Miniaturas de Immich en SSD local: descartado en este equipo.** Acelera la línea de
 tiempo, pero el SSD es de 128 GB y las miniaturas son un 10-20% de la biblioteca. El espacio
 manda sobre la velocidad: se quedan en el NAS.
+
+---
+
+## FASE 8b — Ver los servicios desde la LAN (red en modo espejo)
+
+**Decisión de Jaime, 2026-09-01.** Hasta aquí los contenedores solo respondían en `localhost`
+del propio Windows: WSL2 sale por NAT y su reenvío automático no cubre la red local, así que
+desde el portátil o la tele de casa no contestaba nadie en `192.168.1.227`. Se resuelve
+poniendo la red de WSL en **modo espejo**, no con `netsh portproxy` (descartado en `PLAN.md`
+§6 por frágil: la IP de WSL cambia en cada arranque).
+
+> ⚠️ Esto cambia la red de WSL entera. Se hace **con el stack parado** y se verifican los
+> montajes del NAS después, porque son lo que más se puede resentir.
+
+### 1. Parar el stack
+
+```bash
+$ cd ~/mediastack/immich    && docker compose down
+$ cd ~/mediastack/navidrome && docker compose down
+$ cd ~/mediastack/jellyfin  && docker compose down
+```
+
+### 2. Modo espejo en `.wslconfig`
+
+En Windows, añadir a `C:\Users\Admin\.wslconfig`, dentro de `[wsl2]` (está ya en
+`wsl/.wslconfig.example`, con el porqué):
+
+```ini
+networkingMode=mirrored
+```
+
+```powershell
+PS> wsl --shutdown          # sin esto no se aplica
+```
+
+### 3. Abrir los puertos en el firewall
+
+En modo espejo el tráfico hacia WSL pasa por el firewall de Windows como cualquier otro. Sin
+reglas, WSL comparte la IP pero el firewall corta, y **el síntoma es idéntico a no haber
+cambiado nada** — es el fallo que más tiempo hace perder aquí.
+
+```powershell
+PS> powershell -ExecutionPolicy Bypass -File \\wsl.localhost\Ubuntu-24.04\home\jaime\mediastack\wsl\08b-red-mirrored.ps1
+```
+
+> Los `.ps1` de este repo se lanzan desde Windows pero **viven en la copia de WSL**, que es la
+> buena (regla 2 del `CLAUDE.md`). Se llega a ellos por `\\wsl.localhost\Ubuntu-24.04\...`.
+> Si Windows se niega a ejecutar desde esa ruta por considerarla de zona no confiable, cópialo
+> antes: `copy \\wsl.localhost\Ubuntu-24.04\home\jaime\mediastack\wsl\08b-red-mirrored.ps1 %TEMP%`
+> y ejecútalo desde ahí.
+
+Abre solo 2283, 4533 y 8096. Homepage (3000) se queda fuera a propósito: publica en
+`127.0.0.1` y se sirve por Caddy.
+
+### 4. Levantar y comprobar
+
+```bash
+$ bash ~/mediastack/scripts/arrancar-stack.sh
+```
+
+**VERIFICACIÓN 8b:**
+
+- [ ] `bash ~/mediastack/scripts/verificar.sh` sale con **0 fallos** — esto cubre los cuatro
+      montajes del NAS, que es lo que había que vigilar.
+- [ ] Desde **otro equipo** de la red: `curl -I http://192.168.1.227:2283` responde, y también
+      `:4533` y `:8096`.
+- [ ] Desde el propio mini PC, `http://localhost:2283` sigue respondiendo.
+- [ ] El backup nocturno sigue escribiendo: `bash ~/mediastack/scripts/backup-immich-db.sh` y
+      mirar que el volcado llega al NAS.
+
+### Si algo se rompe: vuelta atrás
+
+Quitar `networkingMode=mirrored` de `.wslconfig` y `wsl --shutdown`. Se vuelve al NAT de
+siempre; las reglas de firewall que dejó el script son inertes en ese modo y no estorban.
+
+### Efecto secundario bueno: NFS
+
+El NAT era justo lo que impedía que el NAS pudiera llamar de vuelta al cliente, y por eso los
+montajes van con `vers=3,nolock` (`wsl/fstab.snippet`). En modo espejo esa limitación
+desaparece y NFSv4.1 con bloqueo debería funcionar. **No se toca el `fstab` a la vez que
+esto**: un cambio cada vez, y el actual funciona. Queda apuntado por si algún día hace falta
+bloqueo de ficheros de verdad sobre el NAS.
 
 ---
 

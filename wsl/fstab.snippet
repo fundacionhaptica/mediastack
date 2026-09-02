@@ -27,9 +27,12 @@
 # y sobre el NAS solo hay lecturas y las subidas de Immich, que tienen un único
 # escritor.
 #
-# Alternativa si algún día molesta: networkingMode=mirrored en .wslconfig hace que
-# WSL comparta la interfaz de Windows y las callbacks funcionen. Cambia toda la red
-# de WSL, así que no se toca mientras esto funcione.
+# ACTUALIZACIÓN 2026-09-01: está DECIDIDO (pero aún no aplicado) poner
+# networkingMode=mirrored en .wslconfig, por otro motivo: que los servicios se vean
+# desde la LAN — PASOS.md fase 8b. Con eso desaparece el NAT y las callbacks de NFS
+# deberían funcionar, así que vers=4.1 con bloqueo pasaría a ser posible.
+# Aun así NO se cambia esto: un cambio cada vez, lo de abajo funciona, y aquí no hay
+# nada que necesite bloqueo por red. Si algún día hace falta, este es el camino.
 # ---------------------------------------------------------------------------
 
 # ---- Histórico de fotos: biblioteca externa de Immich, SOLO LECTURA ----
@@ -40,19 +43,19 @@
 # ---- Música para Navidrome, SOLO LECTURA ----
 192.168.1.205:/volume1/music  /mnt/nas/musica  nfs  ro,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
 
-# ---- PENDIENTES: estas tres carpetas todavía no existen o no están exportadas ----
-#
-# Subidas nuevas de Immich (UPLOAD_LOCATION). Es lo ÚNICO que Immich escribe en el
-# NAS. Debe ser una carpeta compartida PROPIA: si fuera una subcarpeta de 'photo',
-# habría que exportar 'photo' en lectura/escritura y se perdería la protección del
-# histórico.
-# 192.168.1.205:/volume1/immich   /mnt/nas/fotos    nfs  rw,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
-#
-# Vídeo para Jellyfin, solo lectura. Falta saber el nombre real de la carpeta.
-# 192.168.1.205:/volume1/XXXXX    /mnt/nas/video    nfs  ro,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
-#
-# Destino de los volcados de la BBDD de Immich (scripts/backup-immich-db.sh).
-# 192.168.1.205:/volume1/backups  /mnt/nas/backups  nfs  rw,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+# ---- Subidas nuevas de Immich (UPLOAD_LOCATION), LECTURA Y ESCRITURA ----
+# Es lo ÚNICO que Immich escribe en el NAS. Va a /volume1/Media (ojo: M mayúscula),
+# con el squash del recurso en «Asignar todos los usuarios a admin». Cambiar ese
+# squash con Immich arrancado lo mete en un bucle de reinicio: ver HANDOFF.md.
+192.168.1.205:/volume1/Media  /mnt/nas/fotos  nfs  rw,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+
+# ---- Vídeo para Jellyfin, SOLO LECTURA ----
+192.168.1.205:/volume1/video  /mnt/nas/video  nfs  ro,vers=3,nolock,soft,timeo=100,retrans=3,nofail,x-systemd.automount,_netdev  0  0
+
+# Los volcados de la BBDD de Immich (scripts/backup-immich-db.sh) NO necesitan un
+# montaje propio: van a /mnt/nas/fotos/backup-immich, es decir una subcarpeta del
+# recurso Media de arriba. Fue decisión de Jaime el 2026-08-27, para no crear una
+# carpeta compartida nueva en el NAS.
 
 # ---------------------------------------------------------------------------
 # VARIANTE CIFS/SMB — plan B, no hace falta hoy. NFS funciona con las opciones de
