@@ -403,6 +403,230 @@ y no necesita exposición a la LAN. Es justo la razón por la que `PLAN.md` §6 
 dentro de WSL y descartó `netsh portproxy`. Lo único que sí rompe es la verificación de la
 fase 6 tal como estaba escrita — ya corregida en `PASOS.md` §6.
 
+### Red en modo espejo: probada el 2026-09-02 y REVERTIDA
+
+Se intentó `networkingMode=mirrored` en `.wslconfig` para que el stack se viera desde la LAN.
+**Rompe los montajes NFS del NAS y hubo que volver atrás.**
+
+Lo que funcionó: `hostname -I` dentro de WSL pasó a devolver `192.168.1.227`, la IP de Windows,
+que era exactamente el objetivo. Las tres reglas de firewall de Hyper-V se crearon bien
+(`wsl/08b-red-mirrored.ps1`).
+
+Lo que rompió: los cuatro montajes del NAS.
+
+```
+$ time ls /mnt/nas/musica
+ls: cannot open directory '/mnt/nas/musica': No such device
+real    0m17.233s
+```
+
+`No such device` tras ~17 s es el automount agotando el `timeo=100,retrans=3` sin respuesta del
+NFS. El NAS estaba sano: comprobado desde otro equipo de la red, sirve NFS con normalidad. Al
+arrancar, WSL ya avisaba con `wsl: Processing /etc/fstab with mount -a failed.`
+
+**Vuelta atrás:** quitar la línea de `.wslconfig` + `wsl --shutdown`. Las reglas de firewall se
+dejan puestas: bajo NAT son inertes.
+
+Y corrige una suposición que estaba escrita en `PLAN.md` §6 y en `wsl/fstab.snippet`: se daba
+por hecho que quitar el NAT haría funcionar el locking de NFS y abriría la puerta a `vers=4.1`.
+Es al revés. Esa vía queda **descartada**, no pendiente.
+
+**El acceso desde la LAN sigue sin resolver.** Quien lo retome: lo que se juega es el NFS, que
+es de lo que come todo el stack. Stack parado, `verificar.sh` antes y después, vuelta atrás
+preparada.
+
+## Fase 6 — hecha a medias, y el resto aplazado a propósito
+
+La tarea **`MediaStack`** está registrada y probada el 2026-08-28: corre como `Admin` con
+`LogonType S4U` y `RunLevel Highest`, disparador al inicio con 30 s de margen, y termina con
+`LastTaskResult: 0`. La cadena entera (root → espera a `dockerd` → baja a `jaime` →
+`arrancar-stack.sh`) queda registrada en `/var/log/mediastack-boot.log`.
+
+⚠️ **Pendiente, aplazado por Jaime el 2026-08-28. Hasta que se haga, el arranque automático NO
+está garantizado:**
+
+1. **BIOS/UEFI → *Restore on AC Power Loss = Power On***. Sin esto, tras un corte de luz el
+   mini PC no se enciende siquiera, y la tarea programada da igual.
+2. **Reinicio en frío**, la única prueba que vale. Reiniciar, esperar 5 minutos sin tocar el
+   teclado ni iniciar sesión, y comprobar por marcas de tiempo que el stack ya estaba en pie
+   antes de que iniciaras sesión — el runbook actualizado está en `PASOS.md` §6. **No** sirve
+   `curl` desde otro equipo de la LAN: esos puertos no salen de WSL.
+
+Mientras tanto, si el equipo se apaga, el stack se levanta con:
+
+```powershell
+wsl -d Ubuntu-24.04 -u root -- /home/jaime/mediastack/scripts/boot-mediastack.sh
+```
+
+### Por qué la tarea no puede correr como SYSTEM
+
+Las distribuciones de WSL se registran **por usuario de Windows**, en `HKCU\...\Lxss`.
+Comprobado: `Ubuntu-24.04` cuelga del perfil de `Admin` y la rama de `S-1-5-18` está vacía. Una
+tarea como SYSTEM lanzaría `wsl.exe` sin encontrar ninguna distribución, y fallaría **en
+silencio** en cada arranque.
+
+---
+
+## Fase 9 — el túnel ya está montado; decidido sacar Jellyfin de él
+
+Túnel **MiniPC_Jaime** (Cloudflare Zero Trust, cuenta `synology-maja`):
+
+| Hostname | Servicio | Puerto local | Estado |
+|---|---|---|---|
+| fotos.ruizespana.com | Immich | localhost:2283 | se queda en el túnel |
+| musica.ruizespana.com | Navidrome | localhost:4533 | se queda en el túnel |
+| pelis.ruizespana.com | Jellyfin | localhost:8096 | **a retirar del túnel** |
+
+**Decisión de Jaime (2026-08-27): se quita `pelis.ruizespana.com` del túnel.** Se confirma lo
+que ya decía `PLAN.md` §6: servir streaming de vídeo por el proxy gratuito de Cloudflare es
+zona gris de sus términos, y el límite de 100 MB por petición rompe la subida de vídeos desde
+la app de Immich. Jellyfin va por Tailscale.
+
+### Actualización 2026-08-31 — `pelis.` y `fotos-vpn.` pasan de Tailscale-only a públicas
+
+Motivo: hace falta compartir contenido (p. ej. el material de un evento) con gente que no va a
+instalarse Tailscale. Exigir tailnet para eso no vale. **Decisión de Jaime: montar un Caddy
+propio en una VM Oracle Cloud Always Free (IP pública), que reenvía por Tailscale al mini PC —
+la VM se deja siempre encendida (Always Free no cobra por eso).** Sigue evitando los dos avisos
+de Cloudflare (§6) porque no hay proxy de Cloudflare de por medio, solo DNS apuntando a un
+servidor propio.
+
+Queda escrito y listo para ejecutar en `oracle-vps/` (README con el paso a paso de la consola de
+OCI, `setup.sh`, `docker-compose.yml` y `Caddyfile`). Se han actualizado en consecuencia:
+`caddy/Caddyfile` del mini PC (ya no sirve `pelis.`/`fotos-vpn.`, solo `casa.`),
+`cloudflared/docker-compose.yml` (comentario con los hostnames públicos) y `PLAN.md` §6.
+
+Pendiente, de la parte de Jaime (nada de esto se puede hacer desde este repo, requiere la
+consola de Oracle Cloud y credenciales suyas):
+
+1. Crear la instancia Always Free en `cloud.oracle.com` (`oracle-vps/README.md` paso 1).
+2. Abrir 80/443 en el Security List de la VCN — capa de firewall de la nube, aparte del `ufw`
+   que instala `setup.sh` en la propia VM.
+3. `ssh` a la VM, clonar el repo, correr `oracle-vps/setup.sh` con un `TAILSCALE_AUTHKEY`.
+4. `docker compose up -d` en `oracle-vps/` con `MINIPC_TS_IP` puesta en `.env`.
+5. Cambiar en Cloudflare los registros A de `pelis` y `fotos-vpn` (nube gris) de la IP de
+   Tailscale del mini PC a la IP pública de la VM.
+
+**Ya está escrito y listo para ejecutar** (runbook completo en `PASOS.md` fase 9):
+
+- `wsl/09-tailscale.sh` — instala Tailscale **dentro de Ubuntu**, no en Windows, y explica por
+  qué. Prerrequisitos comprobados el 2026-08-27: `/dev/net/tun`, `ip_forward=1`, systemd
+  `running`.
+- `caddy/` — reverse proxy que escucha **solo en la IP del tailnet** y da HTTPS válido por
+  DNS-01 contra Cloudflare, sin abrir un puerto a Internet. La imagen se compila
+  (`caddy/Dockerfile`) porque la oficial no trae el proveedor DNS de Cloudflare.
+  Sirve `pelis`, `fotos-vpn` y `casa`.
+- `homepage/` — portal de entrada en `casa.ruizespana.com`, con las tres apps y el widget de
+  recursos (útil con el presupuesto de RAM de `PLAN.md` §3).
+- `PLAN.md` §6 actualizado: el nombre pasa a ser `pelis.` (era `videos.`), se añade `casa.`, y
+  se documenta el detalle que rompía la idea — **un registro DNS apunta a una IP, no a un
+  puerto**, de ahí Caddy.
+
+Lo que hace falta de tu parte, en este orden:
+
+1. **Borrar `pelis.ruizespana.com` del túnel** en Zero Trust → Networks → Tunnels →
+   MiniPC_Jaime. Es justo el tráfico que no queremos por el proxy.
+2. Ejecutar `wsl/09-tailscale.sh` y autenticar con `tailscale up --hostname=minipc-jrh`.
+3. Tres registros **A en nube GRIS** (`pelis`, `fotos-vpn`, `casa`) → la IP `100.x.y.z`.
+4. Un **token de API de Cloudflare** acotado a la zona (`Zone:DNS:Edit`) en `caddy/.env`.
+
+Nada de esto se levanta hasta que el stack esté verde en LAN, o sea, hasta el NFS.
+
+Además, el contenedor `cloudflared` del mini PC **todavía no está levantado** y
+`cloudflared/.env` con `TUNNEL_TOKEN` no existe: hasta que el stack no esté verificado en LAN
+no se levanta (así lo dice el propio compose).
+
+---
+
+## Trampas ya pagadas (no volver a tropezar)
+
+- **`Microsoft-Windows-Subsystem-Linux` se queda en `Disabled` para siempre**: solo hace falta
+  para WSL1. El componente que importa es `VirtualMachinePlatform`. Exigir el primero hacía
+  que `01-instalar-wsl2.ps1` pidiera reinicio en bucle.
+- **No pasar scripts a `wsl.exe` por argumentos ni por la entrada estándar** desde
+  PowerShell 5.1: se come los `$` y las `\` de la línea de comandos aunque vayan entre comillas
+  simples (`$(date)`, `awk '$3'`, `s/\r$//`, rutas `C:\...`), y por stdin mete un BOM y remata
+  con CRLF. Escribir un `.sh` en UTF-8 sin BOM y ejecutarlo por su ruta, como hacen
+  `02-configurar-ubuntu.ps1` y la tarea programada de la fase 6.
+- **`2>&1` sobre un `.exe` en PowerShell 5.1** con `$ErrorActionPreference='Stop'` aborta el
+  script por `NativeCommandError` aunque el comando haya ido bien. Usar `2>$null`.
+- El driver de almacenamiento de Docker 29 se llama **`overlayfs`**, no `overlay2`.
+- `docker inspect` de un contenedor inexistente deja un salto de línea en la salida: sin
+  limpiarlo, `verificar.sh` reportaba `estado '\nausente'`. Ya corregido.
+- **La trampa de los `$` en `wsl.exe` también aplica llamando desde bash**, no solo desde
+  PowerShell 5.1: un `bash -c '...$VAR...'` pasado como argumento a `wsl.exe` pierde las
+  variables y el script se ejecuta con ellas vacías, sin dar ningún error. La regla es la
+  misma de siempre: escribir el `.sh` y ejecutarlo por su ruta.
+- La salida de `wsl.exe` llamado **desde dentro de WSL** viene en UTF-16 con NULs: pasarla por
+  `tr -d '\0'` o no se puede grepear.
+
+---
+
+## Estado de `scripts/verificar.sh`
+
+**0 fallos** en la última ejecución conocida en el mini PC (2026-08-28, con los cinco
+contenedores en marcha). Entorno WSL, Docker, montajes del NAS y las reglas de almacenamiento
+(Postgres en ext4 local), todo en verde.
+
+Se ejecuta **dentro de Ubuntu**, en la máquina real — no vale desde otro sitio:
+
+```bash
+bash ~/mediastack/scripts/verificar.sh
+```
+
+### Comprobar el estado del mini PC en remoto
+
+Desde una sesión sin acceso a la LAN de casa, el NAS sirve de punto de observación (está en la
+misma red). **Ojo con el método**: el contenedor del MCP del NAS corre `dash`, no `bash`, así
+que `/dev/tcp/host/puerto` **no existe** ahí y falla siempre en silencio — da «cerrado» para
+todo, incluidos los puertos que están abiertos. Un sondeo hecho así el 2026-09-01 llevó a
+concluir, mal, que el mini PC estaba apagado.
+
+Lo que sí funciona es `curl`, y siempre **validándolo primero contra el NAS**, que sabemos vivo:
+
+```bash
+# ¿responde HTTP?  (000 = no contesta)
+for p in 2283 4533 8096; do
+  printf '%s -> ' $p
+  curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 http://192.168.1.227:$p/
+done
+
+# ¿está el equipo encendido?  El código de salida de curl distingue lo que el
+# código HTTP no puede. Validar el método contra el NAS antes de creerse nada:
+#   192.168.1.205:445  -> 28  (abierto, no habla HTTP)
+#   192.168.1.205:9999 -> 7   (cerrado)
+curl -s -o /dev/null --connect-timeout 4 --max-time 6 http://192.168.1.227:445/; echo $?
+```
+
+| Código de salida | Significa |
+|---|---|
+| `7` | Conexión rechazada o host inalcanzable |
+| `28` | Timeout: puerto filtrado, o el equipo no está |
+| `52` / `56` | **Conectó**: hay alguien al otro lado. El equipo está encendido |
+
+### Estado a 2026-09-01: encendido, pero WSL no se ve desde la LAN
+
+`445` da `56` (conecta y corta) → **el mini PC está encendido y en la red**. Pero `2283`, `4533`
+y `8096` dan timeout, y un barrido de `192.168.1.0/24` no encuentra esos puertos en **ninguna**
+IP: no es que haya cambiado de IP.
+
+La explicación más probable es la de siempre con WSL2: los contenedores escuchan dentro de
+Ubuntu, y el reenvío automático de WSL2 solo cubre **`localhost` del propio Windows**. Desde
+otro equipo de la LAN no hay nada que responda, aunque el stack esté perfectamente arrancado.
+Para confirmarlo, en el mini PC:
+
+```powershell
+PS> curl.exe -I http://localhost:2283          # si responde aquí, el stack está bien
+PS> netsh interface portproxy show v4tov4      # ¿hay reenvío a la LAN? (esperado: vacío)
+PS> Get-NetFirewallRule -DisplayName *2283* | Format-List DisplayName,Enabled,Direction,Action
+```
+
+**Esto no bloquea la fase 9**: Tailscale corre *dentro* de Ubuntu y Caddy escucha en la IP del
+tailnet, también dentro de Ubuntu, así que todo termina en el mismo sitio que los contenedores
+y no necesita exposición a la LAN. Es justo la razón por la que `PLAN.md` §6 puso Tailscale
+dentro de WSL y descartó `netsh portproxy`. Lo único que sí rompe es la verificación de la
+fase 6 tal como estaba escrita — ya corregida en `PASOS.md` §6.
+
 ### Decisión: red en modo espejo (Jaime, 2026-09-01)
 
 Aun así se quiere acceso desde la LAN, para no dar la vuelta por Internet o por el tailnet

@@ -18,26 +18,26 @@ processors=3
 swap=6GB
 
 # ---------------------------------------------------------------------------
-# RED EN MODO ESPEJO — decisión de Jaime, 2026-09-01
+# RED EN MODO ESPEJO — PROBADO Y DESCARTADO EL 2026-09-02
 # ---------------------------------------------------------------------------
-# Por defecto WSL2 sale por NAT detrás de Windows: los contenedores solo se
-# alcanzan desde 'localhost' del propio Windows, y desde otro equipo de la LAN
-# no responde nadie. Con 'mirrored', WSL comparte las interfaces y las IPs de
-# Windows, así que Immich, Navidrome y Jellyfin se ven desde toda la casa en
-# 192.168.1.227 sin 'netsh portproxy' (que este plan descartó por frágil).
+# NO PONER networkingMode=mirrored EN ESTE EQUIPO.
 #
-# Requiere Windows 11 22H2+ y WSL 2.0+. Aquí: WSL 2.7.12. OK.
+# La idea era buena: por defecto WSL2 sale por NAT y los contenedores solo se
+# alcanzan desde 'localhost' del propio Windows, asi que desde otro equipo de la
+# LAN no responde nadie. En modo espejo WSL comparte las IPs de Windows y eso se
+# arregla — y de hecho se arreglo: 'hostname -I' dentro de WSL devolvia
+# 192.168.1.227.
 #
-# Dos efectos secundarios que hay que saber:
-#  · El firewall de Windows pasa a filtrar el tráfico hacia WSL. Hay que abrir
-#    los puertos con reglas de Hyper-V: wsl/08b-red-mirrored.ps1 las pone.
-#  · Los servicios quedan expuestos a TODA la LAN. Es lo que se busca, pero por
-#    eso Homepage sigue publicando en 127.0.0.1:3000 y no en 0.0.0.0.
+# El problema es que ROMPE LOS MONTAJES NFS DEL NAS. Los cuatro dejaron de
+# funcionar: 'ls /mnt/nas/musica' daba "No such device" tras 17 segundos, con el
+# NAS sirviendo NFS con normalidad. Sin montajes no hay stack.
 #
-# Efecto secundario bueno: desaparece el NAT que impedía las callbacks de NFS.
-# Es lo que obligó a montar el NAS con vers=3,nolock (ver wsl/fstab.snippet).
-# NO se cambia el fstab a la vez que esto: un cambio cada vez.
-networkingMode=mirrored
+# Detalle completo, con el error exacto y la vuelta atras: PASOS.md fase 8b.
+# Por que no se resolvio por otra via, y que queda abierto: PLAN.md seccion 6.
+#
+# La linea se deja comentada a proposito, para que nadie la vuelva a poner sin
+# leer antes lo que costo quitarla:
+# networkingMode=mirrored
 
 [experimental]
 # Devuelve al host la RAM que WSL deja de usar (si no, se queda "pegada" tras

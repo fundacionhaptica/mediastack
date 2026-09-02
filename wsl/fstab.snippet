@@ -27,12 +27,14 @@
 # y sobre el NAS solo hay lecturas y las subidas de Immich, que tienen un único
 # escritor.
 #
-# ACTUALIZACIÓN 2026-09-01: está DECIDIDO (pero aún no aplicado) poner
-# networkingMode=mirrored en .wslconfig, por otro motivo: que los servicios se vean
-# desde la LAN — PASOS.md fase 8b. Con eso desaparece el NAT y las callbacks de NFS
-# deberían funcionar, así que vers=4.1 con bloqueo pasaría a ser posible.
-# Aun así NO se cambia esto: un cambio cada vez, lo de abajo funciona, y aquí no hay
-# nada que necesite bloqueo por red. Si algún día hace falta, este es el camino.
+# ACTUALIZACIÓN 2026-09-02: se probó networkingMode=mirrored en .wslconfig (para que
+# los servicios se vieran desde la LAN) y hubo que REVERTIRLO: con el NAT fuera, estos
+# cuatro montajes dejaron de funcionar — "No such device" tras 17 s, con el NAS
+# sirviendo NFS con normalidad. Ver PASOS.md fase 8b.
+#
+# O sea que la nota anterior estaba equivocada: quitar el NAT no arregla el locking,
+# lo empeora hasta impedir el montaje. vers=4.1 con bloqueo por esta vía queda
+# DESCARTADO, no pendiente. Lo de abajo, con vers=3,nolock, es lo que funciona.
 # ---------------------------------------------------------------------------
 
 # ---- Histórico de fotos: biblioteca externa de Immich, SOLO LECTURA ----
