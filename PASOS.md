@@ -7,8 +7,9 @@ Pensado para ejecutarse **con Claude Code**, fase a fase. Cada fase tiene:
 > Se arregla o se revierte. Nada de "ya lo miro luego".
 
 > **Regla heredada:** en este runbook no se borra, mueve ni reorganiza nada del NAS.
-> Todo lo que toca el NAS es de **solo lectura**, salvo dos carpetas nuevas que se crean
-> vacías (`fotos` para las subidas de Immich y `backups/immich-db`).
+> De los cuatro montajes, tres son de **solo lectura** (`photo`, `music`, `video`). El único
+> con escritura es `Media`, y ahí se escribe únicamente en lo que Immich sube y en la
+> subcarpeta `backup-immich`, que crea sola `scripts/backup-immich-db.sh`.
 
 ## Dónde ejecutar cada cosa
 
@@ -404,17 +405,26 @@ el mismo sitio que los contenedores (`PLAN.md` §6).
 ```bash
 $ mkdir -p /var/lib/mediastack/{navidrome/data,jellyfin/{config,cache}}
 
-$ cd ~/mediastack/navidrome && echo "PUID=$(id -u)"$'\n'"PGID=$(id -g)" > .env && docker compose up -d
+$ cd ~/mediastack/navidrome && echo "PUID=$(id -u)"$'\n'"PGID=$(id -g)"$'\n'"TZ=Europe/Madrid" > .env && docker compose up -d
 $ cd ~/mediastack/jellyfin  && echo "PUID=$(id -u)"$'\n'"PGID=$(id -g)"$'\n'"TZ=Europe/Madrid" > .env && docker compose up -d
 
 # backup diario de la BBDD de Immich (las fotos ya las respalda el NAS; los álbumes NO)
-$ mkdir -p /mnt/nas/backups/immich-db
 $ crontab -e
-#   30 0 * * * /home/TU_USUARIO/mediastack/scripts/backup-immich-db.sh >> /var/log/immich-backup.log 2>&1
+#   30 0 * * * /home/jaime/mediastack/scripts/backup-immich-db.sh >> /home/jaime/immich-backup.log 2>&1
 ```
 
-Jellyfin (`http://<ip>:8096`): asistente inicial, y añadir bibliotecas apuntando a `/media/...`
-(la ruta **dentro del contenedor**, no la de WSL).
+**No hay que crear ninguna carpeta en el NAS a mano.** Los volcados van a
+`/mnt/nas/fotos/backup-immich` — una subcarpeta del recurso `Media` que Immich ya usa como
+`UPLOAD_LOCATION`, decisión de Jaime del 2026-08-27 para no añadir una carpeta compartida
+nueva. `scripts/backup-immich-db.sh` la crea él solo, comprueba antes que `/mnt/nas/fotos` esté
+montado, y rota los volcados de más de 30 días **dentro de esa carpeta y de ninguna otra**.
+
+Jellyfin (`http://localhost:8096`, en el navegador del propio mini PC — desde otro equipo de la
+LAN no responde, ver el aviso de la fase 6): asistente inicial, y añadir bibliotecas apuntando a
+`/media/...` (la ruta **dentro del contenedor**, no la de WSL). Si pones `/mnt/nas/video`,
+Jellyfin no encuentra nada y parece que el montaje está roto.
+
+Navidrome (`http://localhost:4533`): crear el usuario. El primero que entra es el administrador.
 
 **VERIFICACIÓN 7:**
 
@@ -422,7 +432,7 @@ Jellyfin (`http://<ip>:8096`): asistente inicial, y añadir bibliotecas apuntand
 $ curl -s http://localhost:4533/ping
 $ curl -s http://localhost:8096/health
 $ docker logs navidrome 2>&1 | grep -iE "scan|error" | tail -20
-$ bash ~/mediastack/scripts/backup-immich-db.sh && ls -lh /mnt/nas/backups/immich-db/
+$ bash ~/mediastack/scripts/backup-immich-db.sh && ls -lh /mnt/nas/fotos/backup-immich/
 $ bash ~/mediastack/scripts/verificar.sh    # debe salir 0 fallos
 ```
 
