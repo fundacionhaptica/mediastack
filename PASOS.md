@@ -582,13 +582,18 @@ $ bash ~/mediastack/scripts/arrancar-stack.sh
 Quitar `networkingMode=mirrored` de `.wslconfig` y `wsl --shutdown`. Se vuelve al NAT de
 siempre; las reglas de firewall que dejó el script son inertes en ese modo y no estorban.
 
-### Efecto secundario bueno: NFS
+### El «efecto secundario bueno» sobre NFS era falso
 
-El NAT era justo lo que impedía que el NAS pudiera llamar de vuelta al cliente, y por eso los
-montajes van con `vers=3,nolock` (`wsl/fstab.snippet`). En modo espejo esa limitación
-desaparece y NFSv4.1 con bloqueo debería funcionar. **No se toca el `fstab` a la vez que
-esto**: un cambio cada vez, y el actual funciona. Queda apuntado por si algún día hace falta
-bloqueo de ficheros de verdad sobre el NAS.
+Aquí estaba escrito que el modo espejo, al quitar el NAT, dejaría al NAS llamar de vuelta al
+cliente y abriría la puerta a montar con `vers=4.1` y bloqueo, en vez del `vers=3,nolock` de
+`wsl/fstab.snippet`. **La prueba del 2026-09-02 dice lo contrario**: sin NAT el montaje ni
+siquiera se completa, y los cuatro montajes se cayeron. No es que el bloqueo siguiera sin
+funcionar: es que se perdió el acceso entero.
+
+Así que esta vía hacia NFSv4.1 queda **descartada, no pendiente**. Si algún día hace falta
+bloqueo de ficheros de verdad sobre el NAS, habrá que buscarlo por otro lado. Hoy no hace
+falta: sobre el NAS solo hay lecturas y las subidas de Immich, con un único escritor
+(`CLAUDE.md` §5, `wsl/fstab.snippet`).
 
 ---
 
