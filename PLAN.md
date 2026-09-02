@@ -248,7 +248,7 @@ serviría y haría falta `netsh portproxy` — una pieza más que se rompe sola 
 actualización de WSL. La contrapartida es que WSL tiene que estar arrancada, que es justo lo
 que garantiza la tarea programada de la fase 6.
 
-### La red local: modo espejo (decisión de Jaime, 2026-09-01)
+### La red local: sin resolver, y el modo espejo descartado por experimento
 
 Lo de arriba resuelve el acceso **desde fuera**, pero no el de **dentro de casa**. Por defecto
 WSL2 sale por NAT: los contenedores solo responden en `localhost` del propio Windows, y desde
@@ -256,25 +256,30 @@ el portátil o la tele no contesta nadie en `192.168.1.227`. Se detectó el 2026
 desde el NAS: ningún equipo del `192.168.1.0/24` servía 2283/4533/8096, con el mini PC
 encendido.
 
-De las tres salidas posibles se elige la segunda:
+Las tres salidas posibles, y dónde está cada una hoy:
 
-| Opción | Por qué no / por qué sí |
+| Opción | Estado |
 |---|---|
-| No exponer nada; entrar siempre por los nombres de dominio | Funciona, pero obliga a dar la vuelta por Internet o por el tailnet para ver un vídeo que está en la habitación de al lado |
-| **`networkingMode=mirrored` en `.wslconfig`** | **Elegida.** WSL comparte las interfaces y las IPs de Windows: los servicios se ven desde la LAN sin piezas añadidas |
-| `netsh portproxy` | Descartada. La IP de WSL cambia en cada arranque, así que el reenvío hay que rehacerlo, y se rompe con las actualizaciones de WSL |
+| No exponer nada; entrar siempre por los nombres de dominio | **La que hay.** Funciona, pero obliga a dar la vuelta por Internet o por el tailnet para ver un vídeo de la habitación de al lado |
+| ~~`networkingMode=mirrored` en `.wslconfig`~~ | ❌ **Probada el 2026-09-02 y revertida: rompe los montajes NFS del NAS.** Ver abajo |
+| `netsh portproxy` | Descartada en el diseño. La IP de WSL cambia en cada arranque, así que el reenvío hay que rehacerlo, y se rompe con las actualizaciones de WSL |
 
-Lo que cuesta: en modo espejo el firewall de Windows pasa a filtrar el tráfico hacia WSL, así
-que los puertos hay que abrirlos con reglas de Hyper-V (`wsl/08b-red-mirrored.ps1`). Y los
-servicios quedan expuestos a toda la LAN — que es lo que se busca, pero por eso Homepage sigue
-publicando en `127.0.0.1:3000` y saliendo solo por Caddy.
+**Qué pasó con el modo espejo (2026-09-02).** Hizo su parte: `hostname -I` dentro de WSL pasó a
+devolver `192.168.1.227`, la IP de Windows. Pero los cuatro montajes del NAS dejaron de
+funcionar — `ls /mnt/nas/musica` devolvía `No such device` tras 17 segundos, la firma del
+automount agotando el `timeo=100,retrans=3` sin respuesta del NFS. El NAS estaba sano
+(comprobado desde otro equipo: sirve NFS con normalidad). Detalle completo y vuelta atrás en
+`PASOS.md` fase 8b.
 
-Lo que se gana de regalo: el NAT era exactamente lo que impedía que el NAS llamara de vuelta al
-cliente NFS, y por eso los montajes van con `vers=3,nolock` (`wsl/fstab.snippet`). En modo
-espejo esa limitación desaparece. El `fstab` **no se cambia a la vez**: un cambio cada vez, y
-el actual funciona.
+**Y de paso corrige una suposición de este mismo plan.** Se escribió aquí que el NAT era lo que
+impedía las callbacks de NFS, y que en modo espejo esa limitación *desaparecería*, abriendo la
+puerta a `vers=4.1` con bloqueo. Es al revés: sin NAT el montaje ni siquiera se completa. Los
+montajes se quedan con `vers=3,nolock` (`wsl/fstab.snippet`), y esa vía para mejorarlos queda
+cerrada.
 
-Runbook: `PASOS.md` fase 8b, con su verificación y su vuelta atrás.
+**Consecuencia:** el acceso desde la LAN sigue **sin resolver**. Quien lo retome debe saber que
+lo que se juega es el NFS, que es de lo que come todo el stack: cualquier intento se hace con
+el stack parado, con `verificar.sh` antes y después, y con la vuelta atrás preparada.
 
 Coste en RAM: Caddy ~128 MB y Homepage ~256 MB de techo, sobre los ~3,5 GB de los 5 que ya
 gastaba el stack (§3). Sigue quedando margen.

@@ -456,14 +456,60 @@ manda sobre la velocidad: se quedan en el NAS.
 
 ## FASE 8b — Ver los servicios desde la LAN (red en modo espejo)
 
+> # ❌ PROBADO EL 2026-09-02: NO FUNCIONA EN ESTE EQUIPO
+>
+> **El modo espejo rompe los montajes NFS del NAS.** No lo apliques. El procedimiento se deja
+> escrito abajo porque está bien y puede servir en otra máquina, pero aquí terminó en vuelta
+> atrás. Lo que pasó, con detalle, en «Resultado» justo debajo.
+
 **Decisión de Jaime, 2026-09-01.** Hasta aquí los contenedores solo respondían en `localhost`
 del propio Windows: WSL2 sale por NAT y su reenvío automático no cubre la red local, así que
-desde el portátil o la tele de casa no contestaba nadie en `192.168.1.227`. Se resuelve
-poniendo la red de WSL en **modo espejo**, no con `netsh portproxy` (descartado en `PLAN.md`
-§6 por frágil: la IP de WSL cambia en cada arranque).
+desde el portátil o la tele de casa no contestaba nadie en `192.168.1.227`. Se intentó
+resolver poniendo la red de WSL en **modo espejo**, no con `netsh portproxy` (descartado en
+`PLAN.md` §6 por frágil: la IP de WSL cambia en cada arranque).
+
+### Resultado del intento — 2026-09-02
+
+El modo espejo **sí hizo su trabajo**: `hostname -I` dentro de WSL pasó a devolver
+`192.168.1.227`, la IP de Windows, que es exactamente lo que se buscaba. Las tres reglas de
+firewall se crearon sin problema.
+
+**Pero los cuatro montajes del NAS dejaron de funcionar.** El síntoma exacto:
+
+```
+$ time ls /mnt/nas/musica
+ls: cannot open directory '/mnt/nas/musica': No such device
+real    0m17.233s
+```
+
+`No such device` tras ~17 segundos es la firma del automount fallando: systemd intenta montar,
+el NFS no responde dentro del `timeo=100,retrans=3` de `wsl/fstab.snippet`, y el automount
+devuelve ENODEV. Los cuatro montajes igual. Antes del cambio, `verificar.sh` daba «montado y
+con contenido legible» en los cuatro; después, AVISO en los cuatro. Ya al arrancar WSL avisaba:
+`wsl: Processing /etc/fstab with mount -a failed.`
+
+No es del NAS: se comprobó desde otro equipo de la red que sirve NFS con normalidad (el 2049
+acepta conexiones). Es el cliente, dentro de WSL, en modo espejo.
+
+⚠️ **Y falsifica lo que este mismo runbook daba por hecho.** Se escribió que el modo espejo
+haría *desaparecer* la limitación que obliga a montar con `vers=3,nolock` — el NAT impedía que
+el NAS llamara de vuelta al cliente. La realidad es la contraria: sin NAT, el montaje ni
+siquiera se completa. La idea de pasar a `vers=4.1` con bloqueo por esta vía queda descartada.
+
+**Decisión: vuelta atrás.** Quitar `networkingMode=mirrored` de `.wslconfig` y `wsl --shutdown`.
+Las reglas de firewall de Hyper-V se dejan puestas: bajo NAT son inertes y no estorban.
+
+El acceso desde la LAN **queda sin resolver**, y con las tres opciones de `PLAN.md` §6 en pie
+menos ésta. Antes de reintentarlo por otra vía, tener presente que lo que se juega es el NFS,
+que es de lo que come todo el stack.
+
+---
+
+### Procedimiento (se deja documentado; NO aplicar en este equipo)
 
 > ⚠️ Esto cambia la red de WSL entera. Se hace **con el stack parado** y se verifican los
-> montajes del NAS después, porque son lo que más se puede resentir.
+> montajes del NAS después, porque son lo que más se puede resentir. En este equipo es
+> justamente donde falló.
 
 ### 1. Parar el stack
 
