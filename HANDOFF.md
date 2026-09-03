@@ -491,7 +491,14 @@ dejan puestas: bajo NAT son inertes.
 > Dos lecciones, y ninguna es "acuérdate mejor":
 > 1. **Decidir una vuelta atrás no es aplicarla.** Se documentó la decisión, no el resultado. Un
 >    cambio no está revertido hasta que la máquina lo demuestra.
-> 2. **`verificar.sh` lo pintó en ámbar.** Su comprobación de montajes no distinguía "carpeta
+> 2. **La espera del NAS de `arrancar-stack.sh` no esperaba.** Usaba `mountpoint -q`, que con
+>    `x-systemd.automount` da verdadero aunque el NFS esté muerto, así que la espera de 5
+>    minutos daba por bueno el primer intento y seguía de largo: por eso los contenedores se
+>    crearon contra montajes caídos y quedaron en `created`. Corregido el 2026-09-03 — ahora
+>    prueba que la carpeta se pueda abrir y, si no responde, **aborta sin arrancar nada**.
+>    Arrancar contra un montaje muerto no es medio arranque: deja contenedores rotos y puede
+>    meter a Immich en el bucle de los marcadores `.immich`.
+> 3. **`verificar.sh` lo pintó en ámbar.** Su comprobación de montajes no distinguía "carpeta
 >    vacía" de "montaje colgado", así que un fallo duro salía como AVISO y se pudo pasar por alto
 >    17 horas. Corregido el 2026-09-03: ahora un montaje que no se puede abrir es FALLO, con el
 >    error real. Si hubiera estado así, esto dura minutos.
