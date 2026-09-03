@@ -347,9 +347,24 @@ no se levanta (así lo dice el propio compose).
 
 ## Estado de `scripts/verificar.sh`
 
-**0 fallos** en la última ejecución conocida en el mini PC (2026-08-28, con los cinco
-contenedores en marcha). Entorno WSL, Docker, montajes del NAS y las reglas de almacenamiento
-(Postgres en ext4 local), todo en verde.
+**0 fallos** en la última ejecución conocida en el mini PC: **2026-09-03**, tras aplicar de
+verdad la vuelta atrás del modo espejo. Los cinco contenedores en marcha, los cuatro montajes
+del NAS legibles, y los tres servicios respondiendo `200` en `localhost`.
+
+Consumo en ese momento, con todo arriba y sin carga:
+
+| Contenedor | Memoria | Límite |
+|---|---|---|
+| `immich_server` | 729 MB | 2,0 GB (36%) |
+| `immich_postgres` | 96 MB | 800 MB |
+| `immich_redis` | 12 MB | 200 MB |
+| `jellyfin` | 165 MB | sin límite |
+| `navidrome` | 55 MB | sin límite |
+
+⚠️ **Inmediatamente después de arrancar, la verificación da fallos que no son fallos.** Immich
+tarda ~1 minuto en levantar (migraciones de la BBDD) y Jellyfin devuelve `503` mientras arranca
+— es su forma de decir «aún no estoy listo», no un error. Espera un minuto y repite antes de
+ponerte a diagnosticar nada.
 
 Se ejecuta **dentro de Ubuntu**, en la máquina real — no vale desde otro sitio:
 
@@ -491,7 +506,14 @@ dejan puestas: bajo NAT son inertes.
 > Dos lecciones, y ninguna es "acuérdate mejor":
 > 1. **Decidir una vuelta atrás no es aplicarla.** Se documentó la decisión, no el resultado. Un
 >    cambio no está revertido hasta que la máquina lo demuestra.
-> 2. **`verificar.sh` lo pintó en ámbar.** Su comprobación de montajes no distinguía "carpeta
+> 2. **La espera del NAS de `arrancar-stack.sh` no esperaba.** Usaba `mountpoint -q`, que con
+>    `x-systemd.automount` da verdadero aunque el NFS esté muerto, así que la espera de 5
+>    minutos daba por bueno el primer intento y seguía de largo: por eso los contenedores se
+>    crearon contra montajes caídos y quedaron en `created`. Corregido el 2026-09-03 — ahora
+>    prueba que la carpeta se pueda abrir y, si no responde, **aborta sin arrancar nada**.
+>    Arrancar contra un montaje muerto no es medio arranque: deja contenedores rotos y puede
+>    meter a Immich en el bucle de los marcadores `.immich`.
+> 3. **`verificar.sh` lo pintó en ámbar.** Su comprobación de montajes no distinguía "carpeta
 >    vacía" de "montaje colgado", así que un fallo duro salía como AVISO y se pudo pasar por alto
 >    17 horas. Corregido el 2026-09-03: ahora un montaje que no se puede abrir es FALLO, con el
 >    error real. Si hubiera estado así, esto dura minutos.
