@@ -357,6 +357,23 @@ Se ejecuta **dentro de Ubuntu**, en la máquina real — no vale desde otro siti
 bash ~/mediastack/scripts/verificar.sh
 ```
 
+### Los dos MCP, y por qué uno no se ve desde la nube
+
+- **NAS-MCP** — corre en el NAS y sí se alcanza desde una sesión en la nube. Es el punto de
+  observación de la LAN que usa el apartado de abajo. Se cayó y volvió el 2026-09-03; si un día
+  no responde, mirar el contenedor `nas-mcp` en `/volume1/docker/nas-mcp`.
+- **Un MCP para WSL, local en el mini PC** (Jaime, 2026-09-03). Es **local a propósito**: se usa
+  desde el propio mini PC y no se publica hacia fuera.
+
+**Que no aparezca desde fuera no es un fallo.** No sale en los conectores de claude.ai, ni en el
+NAS, ni en este repo, y así debe ser: una sesión en la nube está fuera de la LAN. Es la misma
+decisión que llevó a instalar Claude Code dentro de Ubuntu en vez de abrir un canal remoto — se
+descartaron SSH abierto a Internet y un MCP de ejecución de comandos por el túnel (`PASOS.md`
+§«Dónde ejecutar cada cosa»). Publicarlo revertiría esa decisión, así que si algún día se plantea,
+se habla y se documenta antes, no se da por bueno.
+
+Queda por documentar desde el propio mini PC: nombre, puerto y qué expone.
+
 ### Comprobar el estado del mini PC en remoto
 
 Desde una sesión sin acceso a la LAN de casa, el NAS sirve de punto de observación (está en la
