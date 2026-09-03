@@ -27,13 +27,27 @@ docker compose version >/dev/null 2>&1 && ok "plugin 'docker compose' presente" 
   || fallo "falta el plugin compose (docker-compose v1 NO sirve para Immich)"
 
 titulo "Montajes del NAS"
+# OJO con lo que prueba cada cosa (aprendido a base de perder 17 horas, 2026-09-03):
+#   - 'mountpoint -q' NO prueba que el NFS responda. Con x-systemd.automount el punto de
+#     montaje existe siempre, esté vivo el NAS o no.
+#   - El 'find' de abajo tampoco vale por sí solo: con 'timeout' y '2>/dev/null', un montaje
+#     colgado devuelve exactamente lo mismo que una carpeta vacía —nada— y salía como AVISO.
+#     Un NFS muerto tarda ~17 s y da 'No such device'; eso es un FALLO, no un aviso.
+# Por eso se prueba primero que la carpeta se pueda ABRIR, y se separa el error del vacío.
 for m in /mnt/nas/fotos /mnt/nas/fotos-historico /mnt/nas/musica /mnt/nas/video; do
-  if mountpoint -q "$m"; then
+  if ! mountpoint -q "$m"; then
+    fallo "$m NO está montado"
+    continue
+  fi
+  err=$(timeout 25 ls -A "$m" 2>&1 >/dev/null); rc=$?
+  if [ "$rc" -eq 124 ]; then
+    fallo "$m no contesta en 25 s → el montaje NFS está colgado"
+  elif [ "$rc" -ne 0 ]; then
+    fallo "$m montado pero ilegible: ${err:-error $rc}"
+  else
     n=$(timeout 20 find "$m" -maxdepth 4 -type f 2>/dev/null | head -1)
     if [ -n "$n" ]; then ok "$m montado y con contenido legible"
-    else aviso "$m montado pero no se ha leído ningún fichero en 4 niveles"; fi
-  else
-    fallo "$m NO está montado"
+    else aviso "$m se abre bien, pero no tiene ficheros en 4 niveles"; fi
   fi
 done
 
