@@ -347,9 +347,24 @@ no se levanta (así lo dice el propio compose).
 
 ## Estado de `scripts/verificar.sh`
 
-**0 fallos** en la última ejecución conocida en el mini PC (2026-08-28, con los cinco
-contenedores en marcha). Entorno WSL, Docker, montajes del NAS y las reglas de almacenamiento
-(Postgres en ext4 local), todo en verde.
+**0 fallos** en la última ejecución conocida en el mini PC: **2026-09-03**, tras aplicar de
+verdad la vuelta atrás del modo espejo. Los cinco contenedores en marcha, los cuatro montajes
+del NAS legibles, y los tres servicios respondiendo `200` en `localhost`.
+
+Consumo en ese momento, con todo arriba y sin carga:
+
+| Contenedor | Memoria | Límite |
+|---|---|---|
+| `immich_server` | 729 MB | 2,0 GB (36%) |
+| `immich_postgres` | 96 MB | 800 MB |
+| `immich_redis` | 12 MB | 200 MB |
+| `jellyfin` | 165 MB | sin límite |
+| `navidrome` | 55 MB | sin límite |
+
+⚠️ **Inmediatamente después de arrancar, la verificación da fallos que no son fallos.** Immich
+tarda ~1 minuto en levantar (migraciones de la BBDD) y Jellyfin devuelve `503` mientras arranca
+— es su forma de decir «aún no estoy listo», no un error. Espera un minuto y repite antes de
+ponerte a diagnosticar nada.
 
 Se ejecuta **dentro de Ubuntu**, en la máquina real — no vale desde otro sitio:
 
