@@ -21,7 +21,7 @@ NAS: **192.168.1.205**. Repo de trabajo: **`~/mediastack` dentro de WSL**.
 | 5 Immich | ✅ | los tres contenedores `healthy`; falta el asistente inicial y la biblioteca externa |
 | 6 Arranque automático | 🔶 casi | tarea registrada y probada; **BIOS y reinicio en frío aplazados a propósito** |
 | 7 Navidrome/Jellyfin | ✅ | los dos `healthy` y el backup diario de la BBDD en cron |
-| 8b LAN (modo espejo) | ❌ descartada | probada el 2026-09-02: rompe los montajes NFS. Revertida |
+| 8b LAN (modo espejo) | ❌ descartada | rompe los montajes NFS. Revertida de verdad el 2026-09-03 |
 | 9 Acceso desde fuera | ⏸ preparada | Tailscale + Caddy + portal escritos; runbook en PASOS.md §9 |
 
 Configuración que ya está puesta:
@@ -365,6 +365,18 @@ bash ~/mediastack/scripts/verificar.sh
 - **Un MCP para WSL, local en el mini PC** (Jaime, 2026-09-03). Es **local a propósito**: se usa
   desde el propio mini PC y no se publica hacia fuera.
 
+Y un dato de la misma sesión, que contradice lo que dice la fase 9 más abajo: **Tailscale ya está
+instalado y autenticado dentro de Ubuntu.** El 2026-09-03 `hostname -I` en el mini PC devolvía
+`100.96.214.61` y una IPv6 `fd7a:115c:a1e0::…`, que es una IP de tailnet asignada. Así que el paso
+«ejecutar `wsl/09-tailscale.sh` y autenticar» de la fase 9 **está hecho**, aunque el runbook lo
+siga dando por pendiente. Lo que no consta comprobado es el resto de la fase: Caddy, los registros
+DNS y la VM de Oracle.
+
+Recordatorio de para qué sirve ahí Tailscale, porque se presta a confusión: es el **túnel privado
+entre la VM de Oracle y el mini PC** (`oracle-vps/Caddyfile` → `reverse_proxy {$MINIPC_TS_IP}`).
+Va instalado en **un** equipo, el mini PC. Ningún visitante de `pelis.` o `fotos-vpn.` necesita
+Tailscale ni instalar nada: entra con el navegador. Eso es justo lo que se decidió el 2026-08-31.
+
 **Que no aparezca desde fuera no es un fallo.** No sale en los conectores de claude.ai, ni en el
 NAS, ni en este repo, y así debe ser: una sesión en la nube está fuera de la LAN. Es la misma
 decisión que llevó a instalar Claude Code dentro de Ubuntu en vez de abrir un canal remoto — se
@@ -445,7 +457,7 @@ y no necesita exposición a la LAN. Es justo la razón por la que `PLAN.md` §6 
 dentro de WSL y descartó `netsh portproxy`. Lo único que sí rompe es la verificación de la
 fase 6 tal como estaba escrita — ya corregida en `PASOS.md` §6.
 
-### Red en modo espejo: probada el 2026-09-02 y REVERTIDA
+### Red en modo espejo: probada el 2026-09-02, y la vuelta atrás NO se aplicó hasta el 09-03
 
 Se intentó `networkingMode=mirrored` en `.wslconfig` para que el stack se viera desde la LAN.
 **Rompe los montajes NFS del NAS y hubo que volver atrás.**
@@ -468,6 +480,21 @@ arrancar, WSL ya avisaba con `wsl: Processing /etc/fstab with mount -a failed.`
 
 **Vuelta atrás:** quitar la línea de `.wslconfig` + `wsl --shutdown`. Las reglas de firewall se
 dejan puestas: bajo NAT son inertes.
+
+> ⚠️ **Esto se escribió como hecho, y no se hizo.** El 2026-09-03, al abrir sesión en el mini PC,
+> `networkingMode=mirrored` seguía en `C:\Users\Admin\.wslconfig` y `hostname -I` devolvía
+> `192.168.1.227`. Los cuatro montajes llevaban **~17 horas** dando `No such device` a los 17 s, e
+> `immich_server`, `navidrome` y `jellyfin` estaban en estado `created` — creados y nunca
+> arrancados, porque sus bind mounts apuntan al NAS. Postgres y Redis aguantaron por vivir en
+> ext4 local (`CLAUDE.md` §5).
+>
+> Dos lecciones, y ninguna es "acuérdate mejor":
+> 1. **Decidir una vuelta atrás no es aplicarla.** Se documentó la decisión, no el resultado. Un
+>    cambio no está revertido hasta que la máquina lo demuestra.
+> 2. **`verificar.sh` lo pintó en ámbar.** Su comprobación de montajes no distinguía "carpeta
+>    vacía" de "montaje colgado", así que un fallo duro salía como AVISO y se pudo pasar por alto
+>    17 horas. Corregido el 2026-09-03: ahora un montaje que no se puede abrir es FALLO, con el
+>    error real. Si hubiera estado así, esto dura minutos.
 
 Y corrige una suposición que estaba escrita en `PLAN.md` §6 y en `wsl/fstab.snippet`: se daba
 por hecho que quitar el NAT haría funcionar el locking de NFS y abriría la puerta a `vers=4.1`.

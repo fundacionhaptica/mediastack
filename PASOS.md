@@ -509,6 +509,16 @@ siquiera se completa. La idea de pasar a `vers=4.1` con bloqueo por esta vía qu
 **Decisión: vuelta atrás.** Quitar `networkingMode=mirrored` de `.wslconfig` y `wsl --shutdown`.
 Las reglas de firewall de Hyper-V se dejan puestas: bajo NAT son inertes y no estorban.
 
+⚠️ **La vuelta atrás se decidió el 2026-09-02 y se aplicó el 2026-09-03.** En medio, el mini PC
+estuvo ~17 horas con el modo espejo puesto y los cuatro montajes NFS caídos, con Immich,
+Navidrome y Jellyfin sin poder arrancar. Comprobación que lo zanja en un segundo, y que conviene
+hacer **después** de tocar `.wslconfig` y reiniciar:
+
+```bash
+$ hostname -I     # si sale 192.168.1.227, el modo espejo SIGUE puesto
+$ grep networkingMode /mnt/c/Users/Admin/.wslconfig     # debe salir comentado o no salir
+```
+
 El acceso desde la LAN **queda sin resolver**, y con las tres opciones de `PLAN.md` §6 en pie
 menos ésta. Antes de reintentarlo por otra vía, tener presente que lo que se juega es el NFS,
 que es de lo que come todo el stack.

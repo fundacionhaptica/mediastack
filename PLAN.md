@@ -261,7 +261,7 @@ Las tres salidas posibles, y dónde está cada una hoy:
 | Opción | Estado |
 |---|---|
 | No exponer nada; entrar siempre por los nombres de dominio | **La que hay.** Funciona, pero obliga a dar la vuelta por Internet o por el tailnet para ver un vídeo de la habitación de al lado |
-| ~~`networkingMode=mirrored` en `.wslconfig`~~ | ❌ **Probada el 2026-09-02 y revertida: rompe los montajes NFS del NAS.** Ver abajo |
+| ~~`networkingMode=mirrored` en `.wslconfig`~~ | ❌ **Rompe los montajes NFS del NAS.** Probada el 2026-09-02; revertida de verdad el 2026-09-03. Ver abajo |
 | `netsh portproxy` | Descartada en el diseño. La IP de WSL cambia en cada arranque, así que el reenvío hay que rehacerlo, y se rompe con las actualizaciones de WSL |
 
 **Qué pasó con el modo espejo (2026-09-02).** Hizo su parte: `hostname -I` dentro de WSL pasó a
