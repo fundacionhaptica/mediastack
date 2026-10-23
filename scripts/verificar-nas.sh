@@ -65,7 +65,7 @@ titulo "Reglas de almacenamiento"
 DBDIR=$(grep -h '^DB_DATA_LOCATION=' "$REPO/immich/.env" 2>/dev/null | cut -d= -f2-)
 case "$DBDIR" in
   "") fallo "no encuentro DB_DATA_LOCATION en immich/.env" ;;
-  "$REPO"*) fallo "Postgres dentro del repo ($DBDIR) — PROHIBIDO, regla 5" ;;
+  "$REPO"/*) fallo "Postgres dentro del repo ($DBDIR) — PROHIBIDO, regla 5" ;;
   "$DATA"/*) ok "Postgres en $DBDIR" ;;
   *) aviso "Postgres en $DBDIR, fuera de $DATA" ;;
 esac
