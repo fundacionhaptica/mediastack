@@ -1,8 +1,51 @@
-# PLAN — Media stack propio (fotos, música, vídeo) en mini PC Windows
+# PLAN — Media stack propio (fotos, música, vídeo): en el NAS desde 2026-10-23
 
 **Fecha:** 2026-08-24 · revisado tras el inventario del equipo
 **Autor:** Jaime + Claude
-**Estado:** aprobado con Immich sin machine learning (ver §3)
+**Estado:** §0 manda (mudanza al NAS, 2026-10-23). §1-§6 describen el mini PC y se conservan como historia
+
+---
+
+## 0. 2026-10-23 — el stack se muda al NAS
+
+**Decisión de Jaime.** El NAS pasa de 6 a **18 GB de RAM** (2 GB de serie + 16 nuevos;
+DSM ve 17,4 GiB). Con eso tiene más memoria libre (~12,5 GB) que el mini PC entero, y los
+ficheros ya viven en él. El mini PC se retira cuando el NAS esté verificado.
+
+| | Mini PC (§1-§6, histórico) | NAS (desde hoy) |
+|---|---|---|
+| RAM disponible | 4,8 GB dentro de WSL | ~12,5 GB libres |
+| Acceso a los ficheros | NFSv3 `nolock` por NAT de WSL | Directo, carpetas locales |
+| Capa intermedia | Windows + WSL2 + tarea programada | Ninguna |
+| CPU / vídeo | N150, QuickSync inalcanzable en WSL | J4125 con `/dev/dri` (QuickSync) |
+| Disco de la BBDD | SSD | **HDD** (DS224+ sin SSD de datos) |
+| ML de Immich | Solo a ratos por RAM | Cabe; se aplaza por **disco** |
+
+**Lo que cambia de las reglas de §4.** El principio no: la base de datos nunca en un recurso
+de red. En el NAS el disco es local, así que Postgres va a `/volume1/docker/mediastack-data`
+(fuera del repo) con `DB_STORAGE_TYPE=HDD`. Lo que se pierde es el SSD: el arranque será más
+lento y el primer escaneo ocupa los discos.
+
+**El riesgo principal ya no es la RAM, es la E/S.** En julio, un Immich de prueba puso el NAS
+a 55% de iowait en su primer arranque, y hay 200.000+ fotos en `/volume1/photo`. Mitigaciones:
+ML apagado hasta terminar las miniaturas, `mem_limit` en todo, y vigilar el iowait
+(`scripts/verificar-nas.sh`). La comprobación de datos de btrfs de los domingos también
+satura los discos: no coincidir con ella.
+
+**Rutas.** Subidas e Immich gestionado: `/volume1/Media` (la misma carpeta que usaba el mini
+PC, que solo tenía carpetas vacías y volcados de una base sin usuarios). Histórico:
+`/volume1/photo` (ro). Música `/volume1/music` (ro). Vídeo `/volume1/video` (ro).
+
+**Red.** El pool automático de subredes de Docker está agotado: `mediastack-net`
+(`10.100.5.0/24`) creada a mano y compartida por los tres servicios.
+
+**Volcados de la BBDD.** Immich v3 hace su propio volcado diario a `/volume1/Media/backups`;
+`scripts/backup-immich-db.sh` (cron del mini PC) deja de hacer falta.
+
+**Acceso.** De momento por LAN (`192.168.1.205:2283/4533/8096`). Publicarlos fuera irá por el
+túnel Cloudflare que ya tiene el NAS (`cloudflare-maja-2`); los límites de §6 sobre Immich y
+Jellyfin detrás de Cloudflare siguen valiendo. Caddy, Tailscale y la VM de Oracle (fase 9 del
+mini PC) quedan aparcados.
 
 ---
 
