@@ -4,27 +4,35 @@ services:
   jellyfin:
     container_name: jellyfin
     image: jellyfin/jellyfin:latest
-    user: "${PUID:-1000}:${PGID:-1000}"
+    # jaime:users en el NAS (1026:100)
+    user: "${PUID:-1026}:${PGID:-100}"
+    # Grupo dueño de /dev/dri/renderD128 en el NAS (937, "videodriver"). Sin él,
+    # Jellyfin ve el dispositivo pero no puede abrirlo y cae a convertir por CPU.
+    # Comprobar:  ls -ln /dev/dri
+    group_add:
+      - "${RENDER_GID:-937}"
     restart: always
     ports:
       - "8096:8096"       # HTTP
-      # - "8920:8920"     # HTTPS: innecesario, el TLS lo pone Cloudflare/Tailscale
       # - "7359:7359/udp" # autodescubrimiento en LAN por clientes Jellyfin
-      # - "1900:1900/udp" # DLNA
     environment:
       - TZ=${TZ:-Europe/Madrid}
-      # URL pública, se rellena en la fase 9:
-      # - JELLYFIN_PublishedServerUrl=https://video.tudominio.com
+      # URL pública, cuando se publique por el túnel:
+      # - JELLYFIN_PublishedServerUrl=https://video.ruizespana.com
+    # Intel QuickSync del J4125. Se activa en la web:
+    # Panel → Reproducción → Transcodificación → Aceleración por hardware → Intel QuickSync (QSV)
+    devices:
+      - /dev/dri:/dev/dri
     volumes:
-      # config y cache: ext4 LOCAL (SQLite + miniaturas). Nunca en el NAS.
-      - /var/lib/mediastack/jellyfin/config:/config
-      - /var/lib/mediastack/jellyfin/cache:/cache
-      # Biblioteca de vídeo en el NAS, solo lectura.
-      - /mnt/nas/video:/media:ro
+      # config y cache: disco local del NAS, fuera del repo git (SQLite + miniaturas).
+      - /volume1/docker/mediastack-data/jellyfin/config:/config
+      - /volume1/docker/mediastack-data/jellyfin/cache:/cache
+      # Biblioteca de vídeo, solo lectura.
+      - /volume1/video:/media:ro
+    mem_limit: 2g
 
-    # FASE 8 (opcional, experimental) — Intel QuickSync a través de WSL2:
-    # no se toca este fichero, se usa el override
-    # docker-compose.hwaccel-wsl.yml.example (renombrar a
-    # docker-compose.override.yml). Immich publica config oficial para WSL;
-    # Jellyfin NO. Puede funcionar o no según iGPU y driver: probar solo con el
-    # stack ya estable y revertir sin drama si el transcode falla.
+# Red con subred fija: el pool automático del NAS está agotado. Ver immich/.
+networks:
+  default:
+    name: mediastack-net
+    external: true
