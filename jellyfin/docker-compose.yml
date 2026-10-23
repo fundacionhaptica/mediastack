@@ -9,7 +9,10 @@ services:
     # Grupo dueño de /dev/dri/renderD128 en el NAS (937, "videodriver"). Sin él,
     # Jellyfin ve el dispositivo pero no puede abrirlo y cae a convertir por CPU.
     # Comprobar:  ls -ln /dev/dri
+    # 101 = "administrators" de DSM: las ACL de Synology dan acceso a jaime por ese grupo,
+    # y el contenedor no lo hereda (sin él: Permission denied en /media y en /config).
     group_add:
+      - "${ADMIN_GID:-101}"
       - "${RENDER_GID:-937}"
     restart: always
     ports:

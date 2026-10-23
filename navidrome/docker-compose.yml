@@ -7,6 +7,11 @@ services:
     # jaime:users en el NAS (1026:100). Tiene que poder leer /volume1/music y
     # escribir en su carpeta de datos.
     user: "${PUID:-1026}:${PGID:-100}"
+    # Grupo "administrators" de DSM (101). Las ACL de Synology dan acceso a jaime por
+    # pertenecer a ese grupo, y un contenedor no hereda los grupos del usuario: sin esta
+    # línea no puede leer /volume1/music ni escribir en su carpeta (comprobado 2026-10-23).
+    group_add:
+      - "${ADMIN_GID:-101}"
     ports:
       - "4533:4533"
     restart: always
