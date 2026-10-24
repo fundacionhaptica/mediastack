@@ -2,10 +2,11 @@
 # Arranca o para el machine learning de Immich (caras y búsqueda por contenido).
 #
 # POR QUÉ EXISTE ESTE SCRIPT
-#   El mini PC tiene 7,9 GB de RAM y Windows por debajo. Immich funciona bien sin
-#   machine learning, pero con él la memoria no llega en horario normal. La salida
-#   es tenerlo apagado y encenderlo a ratos, con el equipo libre, hasta procesar el
-#   atrasado. Una vez indexado el histórico, el gasto diario es pequeño.
+#   En el NAS (18 GB) la RAM ya no es el límite: lo es el disco. El primer escaneo del
+#   histórico lee cada foto para sacar miniaturas; si el ML lee a la vez, los discos se
+#   saturan y todo el NAS va lento. Se enciende cuando las miniaturas han terminado
+#   (Administración → Trabajos: "Generar miniaturas" sin pendientes). Una vez procesado
+#   el histórico, se puede dejar encendido siempre.
 #
 # USO
 #   bash scripts/ml.sh on      arranca el contenedor de ML
@@ -48,7 +49,7 @@ case "${1:-}" in
       echo "ML parado"
     fi
     echo
-    echo "Memoria libre en WSL:"
+    echo "Memoria libre en el NAS:"
     free -h | awk '/^Mem:/{printf "  %s libres de %s\n", $7, $2}'
     ;;
   *)

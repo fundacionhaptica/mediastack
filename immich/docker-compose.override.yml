@@ -1,11 +1,13 @@
-# Immich — capa propia sobre el docker-compose.yml OFICIAL
+# Immich — capa propia sobre el docker-compose.yml OFICIAL (en el NAS desde 2026-10-23)
 #
 # El docker-compose.yml de Immich NO se edita nunca: se descarga tal cual de la release
 # y se actualiza con cada versión. Todo lo nuestro vive aquí.
 #
-#   cd ~/mediastack/immich
-#   wget -O docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
-#   docker compose up -d          # compose fusiona automáticamente este override
+#   cd /volume1/docker/mediastack/immich
+#   V=v3.3.5   # la release que se instala; igual que IMMICH_VERSION en .env
+#   for f in docker-compose.yml hwaccel.transcoding.yml hwaccel.ml.yml; do
+#     wget -O $f https://github.com/immich-app/immich/releases/download/$V/$f; done
+#   docker compose config >/dev/null && docker compose up -d
 #
 # Comprobar la fusión antes de arrancar:  docker compose config
 
@@ -14,60 +16,57 @@ services:
     environment:
       - TZ=${TZ}
     volumes:
-      # Biblioteca externa: el histórico de fotos que YA está en el NAS.
+      # Biblioteca externa: el histórico que ya está en el NAS (Synology Photos).
       # :ro es deliberado — Immich no podrá borrar ni modificar nada de ahí.
-      # La ruta interna /mnt/nas/fotos-historico es la que se pega en la UI de Immich
-      # al crear la external library (Administración → Bibliotecas externas).
-      - ${EXTERNAL_LIBRARY}:/mnt/nas/fotos-historico:ro
-    # Techo de memoria: en un equipo de 8 GB, un pico del servidor no puede
-    # llevarse por delante a Postgres.
-    #
-    # Subido de 1500m a 2000m el 2026-08-27: recien arrancado y SIN biblioteca
-    # todavia, el contenedor ya se asentaba en 1,1 GB (75% del techo anterior).
-    # El momento de riesgo es el primer escaneo del historico. Los 500m extra
-    # salen del margen que ya tenia WSL, no de .wslconfig.
-    #
-    # OJO: con el perfil "ml" encendido (2500m) esto ya NO cabe holgadamente en
-    # los 5 GB de WSL. Por eso el ML sigue siendo solo a demanda y de noche.
-    mem_limit: 2000m
+      # En la web: Administración → Bibliotecas externas → ruta /fotos-historico
+      # Las carpetas @eaDir, #recycle y ._* de Synology las excluye Immich por defecto.
+      - ${EXTERNAL_LIBRARY}:/fotos-historico:ro
+    # Intel QuickSync del J4125 para convertir vídeo. Solo da acceso al dispositivo;
+    # se activa en la web: Administración → Ajustes → Transcodificación de vídeo →
+    # Aceleración por hardware → Quick Sync.
+    devices:
+      - /dev/dri:/dev/dri
+    # Techo de memoria. El NAS tiene 18 GB, pero comparte máquina con ~35 contenedores
+    # más: un pico de Immich no puede llevarse por delante al resto.
+    mem_limit: 3g
 
   database:
-    mem_limit: 800m
+    environment:
+      # La base de datos va sobre los discos mecánicos del NAS (el DS224+ no tiene
+      # SSD de datos). Con esto Immich ajusta Postgres a disco lento. Es la opción
+      # que la propia plantilla oficial deja comentada para este caso.
+      DB_STORAGE_TYPE: 'HDD'
+    mem_limit: 1536m
 
   redis:
-    mem_limit: 200m
+    mem_limit: 256m
 
   # ---------------------------------------------------------------------------
-  # MACHINE LEARNING — APAGADO POR DEFECTO
+  # MACHINE LEARNING (caras y búsqueda por contenido) — APAGADO AL PRINCIPIO
   #
-  # Este equipo tiene 7,9 GB y Windows encima. Immich pide 6 GB mínimo y 8 GB
-  # recomendado; el reconocimiento de caras y la búsqueda por contenido son
-  # justo la parte que más RAM consume, y no cabe en horario normal.
+  # Con 18 GB la RAM ya no es el problema. El problema es el DISCO: el primer
+  # escaneo de 200.000+ fotos lee cada original para sacar miniaturas, y el ML
+  # vuelve a leerlas. Todo a la vez satura los discos y ralentiza todo el NAS
+  # (pasó con Immich en julio: 55% de iowait). Por eso se enciende DESPUÉS de
+  # que terminen las miniaturas:
   #
-  # El perfil "ml" hace que este contenedor NO arranque con `docker compose up -d`.
-  # Para lanzarlo puntualmente (de noche, con el PC libre):
+  #     bash /volume1/docker/mediastack/scripts/ml.sh on
   #
-  #     bash ~/mediastack/scripts/ml.sh on      # arranca ML
-  #     bash ~/mediastack/scripts/ml.sh off     # lo para
-  #
-  # Y en la web, Administración → Ajustes → Machine Learning: activar solo
-  # mientras esté arrancado. Ver "Anexo ML" en PASOS.md.
+  # Cuando el histórico esté procesado se puede dejar encendido siempre:
+  # el gasto diario es pequeño.
   # ---------------------------------------------------------------------------
   immich-machine-learning:
     profiles: ["ml"]
-    mem_limit: 2500m
+    mem_limit: 3g
     environment:
-      # Un solo hilo de inferencia: más lento, pero no ahoga los 4 hilos del N150
+      # Un solo hilo de inferencia: más lento, pero no ahoga los 4 núcleos del J4125
       - MACHINE_LEARNING_WORKERS=1
       - MACHINE_LEARNING_WORKER_TIMEOUT=300
 
-  # ---------------------------------------------------------------------------
-  # FASE 8 (opcional) — aceleración por hardware en WSL2.
-  # No descomentar hasta que el stack funcione en CPU y esté verificado.
-  # Requiere los ficheros hwaccel.*.yml de la misma release en esta carpeta.
-  # ---------------------------------------------------------------------------
-  #
-  # immich-server:
-  #   extends:
-  #     file: hwaccel.transcoding.yml
-  #     service: vaapi-wsl
+# El pool de subredes automáticas de Docker en este NAS está AGOTADO: un compose
+# que crea su red propia no arranca. Se usa una red creada a mano con subred fija:
+#   docker network create --subnet 10.100.5.0/24 mediastack-net
+networks:
+  default:
+    name: mediastack-net
+    external: true

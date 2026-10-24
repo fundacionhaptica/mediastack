@@ -1,48 +1,39 @@
 # mediastack
 
-Fotos, música y vídeo autoalojados en el mini PC Windows, con los ficheros en MaJaNAS.
+Fotos, música y vídeo autoalojados en **MaJaNAS** (DS224+, 18 GB de RAM), junto a los
+ficheros. Hasta el 2026-10-23 corría en el mini PC Windows; ver `PLAN.md` §0.
 
 | App | Qué | URL local |
 |---|---|---|
-| [Immich](https://immich.app) | Fotos (tipo Google Fotos) | `http://<mini-pc>:2283` |
-| [Navidrome](https://navidrome.org) | Música (Subsonic) | `http://<mini-pc>:4533` |
-| [Jellyfin](https://jellyfin.org) | Vídeo | `http://<mini-pc>:8096` |
+| [Immich](https://immich.app) | Fotos (tipo Google Fotos) | `http://192.168.1.205:2283` |
+| [Navidrome](https://navidrome.org) | Música (Subsonic) | `http://192.168.1.205:4533` |
+| [Jellyfin](https://jellyfin.org) | Vídeo | `http://192.168.1.205:8096` |
 
 ## Por dónde empezar
 
-1. **`PLAN.md`** — arquitectura, decisiones y por qué. Léelo entero una vez.
-2. **`PASOS.md`** — el runbook. Fases 0 a 9, cada una con su verificación.
+1. **`HANDOFF.md`** — estado actual y siguiente paso.
+2. **`PLAN.md`** — §0 es la decisión de pasar al NAS; el resto, el diseño del mini PC.
 3. **`CLAUDE.md`** — reglas para las sesiones de Claude Code sobre este repo.
 
-## Estructura
+`PASOS.md`, `wsl/` y los scripts de arranque y montaje son del mini PC: se conservan hasta
+retirarlo.
 
-```
-mediastack/
-├── PLAN.md · PASOS.md · CLAUDE.md
-├── immich/       docker-compose.override.yml + .env.example
-│                 (el docker-compose.yml oficial se descarga, no se versiona editado)
-├── navidrome/    docker-compose.yml
-├── jellyfin/     docker-compose.yml + override de iGPU (opcional)
-├── cloudflared/  docker-compose.yml   (fase 9)
-├── wsl/          .wslconfig, wsl.conf, fstab.snippet
-└── scripts/      verificar.sh · arrancar-stack.sh · backup-immich-db.sh
-```
-
-## Comandos del día a día
+## Comandos del día a día (en el NAS)
 
 ```bash
-bash scripts/verificar.sh          # ¿está todo bien?
-bash scripts/arrancar-stack.sh     # levantar todo
-docker stats --no-stream           # quién se come la RAM
+bash /volume1/docker/mediastack/scripts/verificar-nas.sh   # ¿está todo bien?
+bash /volume1/docker/mediastack/scripts/ml.sh estado       # caras y búsqueda por contenido
+docker stats --no-stream                                   # quién se come la RAM
 ```
 
 ## Dónde vive cada dato
 
 | | Sitio | Se respalda con |
 |---|---|---|
-| Fotos, música, vídeo | NAS | backup del NAS (1:00) |
-| Postgres de Immich (álbumes, caras) | ext4 local del mini PC | `scripts/backup-immich-db.sh` → NAS |
-| Config de Jellyfin / Navidrome | ext4 local del mini PC | pendiente (regenerable) |
+| Fotos, música, vídeo | `/volume1/photo`, `music`, `video` | backup del NAS |
+| Subidas, miniaturas de Immich | `/volume1/Media` | backup del NAS |
+| Postgres de Immich (álbumes, caras) | `/volume1/docker/mediastack-data/immich/postgres` | volcado diario automático de Immich → `/volume1/Media/backups` |
+| Config de Jellyfin / Navidrome | `/volume1/docker/mediastack-data/` | backup del NAS (regenerable) |
 
-Las bases de datos **nunca** van al NAS: Immich lo prohíbe explícitamente y SQLite sobre
-red se corrompe.
+Los datos de servicio van **fuera del repo** (`/volume1/docker/mediastack`) y nunca en un
+recurso de red.
