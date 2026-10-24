@@ -34,8 +34,13 @@ Guion paso a paso para hacerlo con Claude Cowork: **`COWORK.md`**.
   Bibliotecas externas* → nueva biblioteca con la ruta **`/fotos-historico`** (es
   `/volume1/photo`, en solo lectura). Lanzar el escaneo **de noche**: son 200.000+ ficheros y
   sacar sus miniaturas ocupa los discos horas.
-- **Jellyfin** `http://192.168.1.205:8096` — asistente; biblioteca apuntando a **`/media`**.
-  Luego *Panel → Reproducción → Transcodificación* → **Intel QuickSync (QSV)**.
+- ~~**Jellyfin**~~ — **hecho el 2026-10-24 por la API** (Jaime fuera de casa): servidor
+  `MaJaNAS`, español/España, usuario administrador `jaime` con **contraseña temporal que
+  hay que cambiar** (*Perfil → Contraseña*), acceso remoto sin UPnP. Bibliotecas
+  **Películas** (`/media/Peliculas`) y **Vídeos** (las 11 subcarpetas de `/media` salvo
+  Peliculas). Los 4 vídeos sueltos en la raíz de `/volume1/video` no entran en ninguna:
+  Jellyfin solo admite carpetas. QuickSync activo y probado: 9,2× tiempo real frente a
+  2,4× por CPU.
 - **Navidrome** `http://192.168.1.205:4533` — crear el usuario; el primer escaneo es solo.
 
 ### 2. Encender el ML de Immich (caras y búsqueda por contenido)

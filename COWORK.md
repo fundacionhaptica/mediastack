@@ -81,6 +81,9 @@ Fase 2: Navidrome. Abre http://192.168.1.205:4533
 
 ## Fase 3 — Jellyfin (vídeo)
 
+> ✅ **Hecha el 2026-10-24 desde Claude Code, por la API** (ver `HANDOFF.md`). Solo queda
+> cambiar la contraseña temporal del usuario `jaime`.
+
 **Texto para Cowork:**
 
 ```
