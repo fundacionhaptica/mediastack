@@ -26,6 +26,8 @@ Tiempos medidos: descargar las cinco imágenes, **~6 min**; primer arranque de I
 
 ## Lo que falta, en este orden
 
+Guion paso a paso para hacerlo con Claude Cowork: **`COWORK.md`**.
+
 ### 1. Asistentes iniciales (Jaime, en el navegador, desde cualquier equipo de la LAN)
 
 - **Immich** `http://192.168.1.205:2283` — crear el admin. Luego *Administración →
