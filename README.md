@@ -11,7 +11,7 @@ ficheros. Hasta el 2026-10-23 corría en el mini PC Windows; ver `PLAN.md` §0.
 
 ## Por dónde empezar
 
-1. **`HANDOFF.md`** — estado actual y siguiente paso.
+1. **`HANDOFF.md`** — estado actual y siguiente paso. **`COWORK.md`**, el guion para terminarlo con Cowork.
 2. **`PLAN.md`** — §0 es la decisión de pasar al NAS; el resto, el diseño del mini PC.
 3. **`CLAUDE.md`** — reglas para las sesiones de Claude Code sobre este repo.
 
