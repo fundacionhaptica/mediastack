@@ -1,0 +1,89 @@
+# Migración de fotos a Immich (2026-10-28)
+#
+#   - icloudpd: un contenedor por cuenta de iCloud. Descarga las fotos al NAS y
+#     las mantiene al día cada 6 h. NUNCA borra nada de iCloud (no se usa
+#     --keep-icloud-recent-days a propósito).
+#   - immich-go: herramienta de una sola pasada (perfil "importar") para subir a
+#     Immich el Takeout de Google y las carpetas de iCloud. Se lanza con
+#     ./importar.sh, no con `up`.
+#
+# Variables en .env (fuera del repo); plantilla en .env.example.
+#
+# Primer arranque de cada cuenta: abrir su web en la LAN, meter la contraseña
+# de Apple y el código de verificación. Apple pide repetirlo cada ~2 meses.
+#   Jaime          http://192.168.1.205:8410
+#   María España   http://192.168.1.205:8411
+#   María Herrero  http://192.168.1.205:8412
+#   María Jesús    http://192.168.1.205:8413
+
+name: migracion-fotos
+
+x-icloudpd: &icloudpd
+  image: icloudpd/icloudpd:1.32.3
+  restart: unless-stopped
+  user: "1026:100"
+  mem_limit: 512m
+  environment:
+    - TZ=${TZ:-Europe/Madrid}
+    - HOME=/config
+
+# Opciones comunes de icloudpd:
+#   --folder-structure {:%Y/%m}   carpetas por año/mes
+#   --xmp-sidecar                 guarda descripción/favoritos en .xmp (Immich los lee)
+#   --file-match-policy name-id7  evita choques de nombres (IMG_0001 repetidos)
+#   --watch-with-interval 21600   vuelve a mirar cada 6 h
+
+services:
+  icloudpd-jaime:
+    <<: *icloudpd
+    container_name: icloudpd-jaime
+    ports: ["8410:8080"]
+    volumes:
+      - ${MIGRACION_DIR}/icloud/jaime:/data
+      - ${CONFIG_DIR}/jaime:/config
+    command: ["icloudpd", "--username", "${APPLE_ID_JAIME:?falta APPLE_ID_JAIME}", "--directory", "/data", "--cookie-directory", "/config", "--password-provider", "webui", "--mfa-provider", "webui", "--folder-structure", "{:%Y/%m}", "--xmp-sidecar", "--file-match-policy", "name-id7", "--watch-with-interval", "21600"]
+
+  icloudpd-maria-espana:
+    <<: *icloudpd
+    container_name: icloudpd-maria-espana
+    ports: ["8411:8080"]
+    volumes:
+      - ${MIGRACION_DIR}/icloud/maria-espana:/data
+      - ${CONFIG_DIR}/maria-espana:/config
+    command: ["icloudpd", "--username", "${APPLE_ID_MARIA_ESPANA:?falta APPLE_ID_MARIA_ESPANA}", "--directory", "/data", "--cookie-directory", "/config", "--password-provider", "webui", "--mfa-provider", "webui", "--folder-structure", "{:%Y/%m}", "--xmp-sidecar", "--file-match-policy", "name-id7", "--watch-with-interval", "21600"]
+
+  icloudpd-maria-herrero:
+    <<: *icloudpd
+    container_name: icloudpd-maria-herrero
+    ports: ["8412:8080"]
+    volumes:
+      - ${MIGRACION_DIR}/icloud/maria-herrero:/data
+      - ${CONFIG_DIR}/maria-herrero:/config
+    command: ["icloudpd", "--username", "${APPLE_ID_MARIA_HERRERO:?falta APPLE_ID_MARIA_HERRERO}", "--directory", "/data", "--cookie-directory", "/config", "--password-provider", "webui", "--mfa-provider", "webui", "--folder-structure", "{:%Y/%m}", "--xmp-sidecar", "--file-match-policy", "name-id7", "--watch-with-interval", "21600"]
+
+  icloudpd-maria-jesus:
+    <<: *icloudpd
+    container_name: icloudpd-maria-jesus
+    ports: ["8413:8080"]
+    volumes:
+      - ${MIGRACION_DIR}/icloud/maria-jesus:/data
+      - ${CONFIG_DIR}/maria-jesus:/config
+    command: ["icloudpd", "--username", "${APPLE_ID_MARIA_JESUS:?falta APPLE_ID_MARIA_JESUS}", "--directory", "/data", "--cookie-directory", "/config", "--password-provider", "webui", "--mfa-provider", "webui", "--folder-structure", "{:%Y/%m}", "--xmp-sidecar", "--file-match-policy", "name-id7", "--watch-with-interval", "21600"]
+
+  # Importador. Binario estático en mediastack-data (lo instala ./instalar-immich-go.sh).
+  immich-go:
+    image: alpine:3.20
+    profiles: ["importar"]
+    user: "1026:100"
+    working_dir: /tmp
+    volumes:
+      - ${CONFIG_DIR}/../immich-go/immich-go:/usr/local/bin/immich-go:ro
+      - ${MIGRACION_DIR}/takeout:/takeout:ro
+      - ${MIGRACION_DIR}/icloud:/icloud:ro
+      - ${MIGRACION_DIR}/logs:/logs
+
+# Pool de redes automáticas agotado: se usa la red creada a mano del stack.
+networks:
+  default:
+    name: mediastack-net
+    external: true
