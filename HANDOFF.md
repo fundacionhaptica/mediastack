@@ -24,6 +24,13 @@ Máquina: **MaJaNAS**, DS224+ (Celeron J4125), **18 GB de RAM** desde el 2026-10
 Tiempos medidos: descargar las cinco imágenes, **~6 min**; primer arranque de Immich hasta
 `healthy`, **~8 min** (migraciones de una base nueva sobre disco mecánico).
 
+## Música en Jellyfin (2026-10-31)
+
+Jellyfin monta también `/volume1/music` en `/music` (solo lectura), para oír la música en la
+tele LG con la app oficial de Jellyfin: Navidrome no tiene app para webOS. Falta crear en
+Jellyfin la biblioteca **Música** (tipo *Música*, carpeta `/music`), con el usuario
+administrador. Navidrome sigue igual y comparte la misma carpeta.
+
 ## Lo que falta, en este orden
 
 Guion paso a paso para hacerlo con Claude Cowork: **`COWORK.md`**.
