@@ -32,6 +32,10 @@ services:
       - /volume1/docker/mediastack-data/jellyfin/cache:/cache
       # Biblioteca de vídeo, solo lectura.
       - /volume1/video:/media:ro
+      # Biblioteca musical (la misma que usa Navidrome), solo lectura. Para oír la música
+      # en la tele LG con la app oficial de Jellyfin: Navidrome no tiene app para webOS.
+      # Biblioteca "Música" en Jellyfin -> carpeta /music.
+      - /volume1/music:/music:ro
     mem_limit: 2g
 
 # Red con subred fija: el pool automático del NAS está agotado. Ver immich/.

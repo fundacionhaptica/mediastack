@@ -58,6 +58,7 @@ titulo "Bibliotecas legibles desde dentro"
 docker exec immich_server sh -c 'ls /fotos-historico >/dev/null' 2>/dev/null && ok "Immich lee /fotos-historico" || fallo "Immich NO lee /fotos-historico"
 docker exec navidrome sh -c 'ls /music >/dev/null' 2>/dev/null && ok "Navidrome lee /music" || fallo "Navidrome NO lee /music"
 docker exec jellyfin sh -c 'ls /media >/dev/null' 2>/dev/null && ok "Jellyfin lee /media" || fallo "Jellyfin NO lee /media"
+docker exec jellyfin sh -c 'ls /music >/dev/null' 2>/dev/null && ok "Jellyfin lee /music" || fallo "Jellyfin NO lee /music"
 docker exec jellyfin sh -c 'test -r /dev/dri/renderD128 && test -w /dev/dri/renderD128' 2>/dev/null \
   && ok "Jellyfin puede usar la GPU (renderD128)" || aviso "Jellyfin no puede abrir /dev/dri/renderD128 → convertirá por CPU"
 
