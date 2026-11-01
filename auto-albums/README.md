@@ -52,6 +52,7 @@ el nombre de cada álbum con su id y el resultado de la última pasada.
 | Álbum | Personas | Modo |
 |---|---|---|
 | Papá y Mamá | Jaime Ruiz Cañada **o** Mari Herrero | espejo |
+| Papá y Mamá juntos | Jaime Ruiz Cañada **y** Mari Herrero en la misma foto (`requiere_todas`) | espejo |
 
 Hora: cada día a las **04:00** (Europe/Madrid), y una pasada al arrancar el contenedor.
 

@@ -6,8 +6,29 @@
       "modo": "espejo",
       "requiere_todas": false,
       "personas": [
-        { "id": "0bf06026-ff31-4e5c-90cf-dd92a030b848", "nombre": "Jaime Ruiz Cañada" },
-        { "id": "6c597642-ff52-4960-9a5d-b7b030e76e24", "nombre": "Mari Herrero" }
+        {
+          "id": "0bf06026-ff31-4e5c-90cf-dd92a030b848",
+          "nombre": "Jaime Ruiz Cañada"
+        },
+        {
+          "id": "6c597642-ff52-4960-9a5d-b7b030e76e24",
+          "nombre": "Mari Herrero"
+        }
+      ]
+    },
+    {
+      "nombre": "Papá y Mamá juntos",
+      "modo": "espejo",
+      "requiere_todas": true,
+      "personas": [
+        {
+          "id": "0bf06026-ff31-4e5c-90cf-dd92a030b848",
+          "nombre": "Jaime Ruiz Cañada"
+        },
+        {
+          "id": "6c597642-ff52-4960-9a5d-b7b030e76e24",
+          "nombre": "Mari Herrero"
+        }
       ]
     }
   ]

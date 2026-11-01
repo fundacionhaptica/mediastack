@@ -33,6 +33,8 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
 - Primer álbum, decidido por Jaime: **Papá y Mamá** = fotos donde sale Jaime Ruiz Cañada
   **o** Mari Herrero, en modo **espejo** (si se corrige una cara, la foto sale del álbum; lo
   añadido a mano también se quita). Irá añadiendo más "poco a poco".
+- Segundo álbum (pedido el mismo día): **Papá y Mamá juntos** = solo fotos donde salen
+  **los dos**, también en espejo.
 - Necesita una clave de API de la cuenta de Jaime con solo `person.read`, `asset.read`,
   `album.read`, `album.create`, `albumAsset.create` y `albumAsset.delete`, en
   `auto-albums/.env` (600). Sin ella el contenedor no se arranca.
