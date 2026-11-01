@@ -24,6 +24,20 @@ Máquina: **MaJaNAS**, DS224+ (Celeron J4125), **18 GB de RAM** desde el 2026-10
 Tiempos medidos: descargar las cinco imágenes, **~6 min**; primer arranque de Immich hasta
 `healthy`, **~8 min** (migraciones de una base nueva sobre disco mecánico).
 
+## Álbumes automáticos por persona (2026-11-01)
+
+Immich v3.3 no los trae: sus *Workflows* aún no filtran por cara ni añaden a álbumes. El
+contenedor **`auto-albums`** (`auto-albums/`, ver su `README.md`) lo suple con la API: cada
+noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de sus personas.
+
+- Primer álbum, decidido por Jaime: **Papá y Mamá** = fotos donde sale Jaime Ruiz Cañada
+  **o** Mari Herrero, en modo **espejo** (si se corrige una cara, la foto sale del álbum; lo
+  añadido a mano también se quita). Irá añadiendo más "poco a poco".
+- Necesita una clave de API de la cuenta de Jaime con solo `person.read`, `asset.read`,
+  `album.read`, `album.create`, `albumAsset.create` y `albumAsset.delete`, en
+  `auto-albums/.env` (600). Sin ella el contenedor no se arranca.
+- Estado en `/volume1/docker/mediastack-data/auto-albums/estado.json`.
+
 ## Música en Jellyfin (2026-10-31)
 
 Jellyfin monta también `/volume1/music` en `/music` (solo lectura), para oír la música en la

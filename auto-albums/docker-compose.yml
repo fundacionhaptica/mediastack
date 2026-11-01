@@ -1,0 +1,42 @@
+# auto-albums — álbumes de Immich que se rellenan solos por persona (ver README.md)
+#
+#   cd /volume1/docker/mediastack/auto-albums
+#   docker compose config >/dev/null && docker compose up -d
+#
+# Sin build: imagen oficial de Python (ya descargada en el NAS) + el script montado.
+name: auto-albums
+
+services:
+  auto-albums:
+    container_name: auto-albums
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/auto_albums.py"]
+    # Mismo usuario que el resto del stack; el grupo 101 por las ACL de Synology
+    # (ver "Trampas" en HANDOFF.md).
+    user: "1026:100"
+    group_add: ["101"]
+    env_file:
+      - .env            # IMMICH_API_KEY (no va al repo; plantilla en .env.example)
+    environment:
+      - TZ=Europe/Madrid
+      - IMMICH_URL=http://immich_server:2283
+      - CONFIG=/config/config.json
+      - ESTADO=/estado/estado.json
+    volumes:
+      - ./auto_albums.py:/app/auto_albums.py:ro
+      - ./config.json:/config/config.json:ro
+      # Estado fuera del repo (regla 5): nombre de álbum → id en Immich, última pasada.
+      - /volume1/docker/mediastack-data/auto-albums:/estado
+    networks:
+      - mediastack-net
+    mem_limit: 64m
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "3"
+
+networks:
+  mediastack-net:
+    external: true
