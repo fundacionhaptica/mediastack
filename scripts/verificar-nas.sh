@@ -62,6 +62,22 @@ docker exec jellyfin sh -c 'ls /music >/dev/null' 2>/dev/null && ok "Jellyfin le
 docker exec jellyfin sh -c 'test -r /dev/dri/renderD128 && test -w /dev/dri/renderD128' 2>/dev/null \
   && ok "Jellyfin puede usar la GPU (renderD128)" || aviso "Jellyfin no puede abrir /dev/dri/renderD128 → convertirá por CPU"
 
+titulo "Álbumes automáticos (auto-albums)"
+st=$(docker inspect auto-albums --format '{{.State.Status}} r={{.RestartCount}} oom={{.State.OOMKilled}}' 2>/dev/null)
+case "$st" in
+  "") aviso "auto-albums no existe (¿falta la clave de API? ver auto-albums/README.md)" ;;
+  running*) ok "auto-albums: $st" ;;
+  *) aviso "auto-albums: $st" ;;
+esac
+EST="$DATA/auto-albums/estado.json"
+if [ -f "$EST" ]; then
+  ult=$(grep -o '"ultima_pasada": "[^"]*"' "$EST" | cut -d'"' -f4)
+  grep -q '"ultima_pasada_ok": true' "$EST" && ok "última pasada OK ($ult)" \
+    || aviso "última pasada CON ERRORES ($ult): docker logs auto-albums"
+else
+  aviso "auto-albums aún no ha hecho ninguna pasada"
+fi
+
 titulo "Reglas de almacenamiento"
 DBDIR=$(grep -h '^DB_DATA_LOCATION=' "$REPO/immich/.env" 2>/dev/null | cut -d= -f2-)
 case "$DBDIR" in

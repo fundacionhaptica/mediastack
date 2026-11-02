@@ -8,6 +8,7 @@ ficheros. Hasta el 2026-10-23 corría en el mini PC Windows; ver `PLAN.md` §0.
 | [Immich](https://immich.app) | Fotos (tipo Google Fotos) | `http://192.168.1.205:2283` |
 | [Navidrome](https://navidrome.org) | Música (Subsonic) | `http://192.168.1.205:4533` |
 | [Jellyfin](https://jellyfin.org) | Vídeo | `http://192.168.1.205:8096` |
+| `auto-albums/` | Álbumes de Immich que se rellenan solos por persona | — (sin puerto) |
 
 ## Por dónde empezar
 
@@ -24,6 +25,7 @@ retirarlo.
 bash /volume1/docker/mediastack/scripts/verificar-nas.sh   # ¿está todo bien?
 bash /volume1/docker/mediastack/scripts/ml.sh estado       # caras y búsqueda por contenido
 docker stats --no-stream                                   # quién se come la RAM
+docker logs --tail 30 auto-albums                           # álbumes automáticos por persona
 ```
 
 ## Dónde vive cada dato
