@@ -39,7 +39,7 @@ Frenos:
 | Fichero | Qué es |
 |---|---|
 | `auto_albums.py` | El script. Solo usa la biblioteca estándar de Python 3.10+ |
-| `config.json` | Álbumes → personas. **Se relee en cada pasada**: cambiarlo no exige reiniciar |
+| `config.json` | Álbumes → personas. **Se relee en cada pasada**: cambiarlo no exige reiniciar (la carpeta se monta entera en `/app`, ver el compose) |
 | `docker-compose.yml` | Contenedor `auto-albums` (`python:3.12-alpine`, sin build, 64 MB) en `mediastack-net` |
 | `.env.example` | Plantilla de `.env` (`IMMICH_API_KEY`). `.env` no va al repo |
 | `test_auto_albums.py` | 12 pruebas contra un Immich simulado: `python -m unittest test_auto_albums.py` |
