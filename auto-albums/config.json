@@ -30,6 +30,25 @@
           "nombre": "Mari Herrero"
         }
       ]
+    },
+    {
+      "nombre": "Nietos",
+      "modo": "espejo",
+      "requiere_todas": false,
+      "personas": [
+        {
+          "id": "be09205f-4579-444a-90ef-acfbfb75a305",
+          "nombre": "Guillermo Ruiz España"
+        },
+        {
+          "id": "52129450-a1cc-45f1-828c-735a243634c1",
+          "nombre": "Mía Magallon"
+        },
+        {
+          "id": "d932d521-4596-43d4-82af-c3b38a54e5b8",
+          "nombre": "India Magallon"
+        }
+      ]
     }
   ]
 }

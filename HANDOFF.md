@@ -35,6 +35,8 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
   añadido a mano también se quita). Irá añadiendo más "poco a poco".
 - Segundo álbum (pedido el mismo día): **Papá y Mamá juntos** = solo fotos donde salen
   **los dos**, también en espejo.
+- Tercer álbum (2026-11-02): **Nietos** = fotos donde sale Guillermo Ruiz España, Mía
+  Magallon o India Magallon, en espejo.
 - Necesita una clave de API de la cuenta de Jaime con solo `person.read`, `asset.read`,
   `album.read`, `album.create`, `albumAsset.create` y `albumAsset.delete`, en
   `auto-albums/.env` (600). Sin ella el contenedor no se arranca.
