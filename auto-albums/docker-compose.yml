@@ -20,11 +20,14 @@ services:
     environment:
       - TZ=Europe/Madrid
       - IMMICH_URL=http://immich_server:2283
-      - CONFIG=/config/config.json
+      - CONFIG=/app/config.json
       - ESTADO=/estado/estado.json
     volumes:
-      - ./auto_albums.py:/app/auto_albums.py:ro
-      - ./config.json:/config/config.json:ro
+      # La CARPETA, no los ficheros sueltos: `git pull` sustituye los ficheros (inodo nuevo)
+      # y un montaje de fichero suelto seguiría viendo la versión vieja hasta reiniciar.
+      # Pasó el 2026-11-02 con el álbum «Nietos». Montando la carpeta, config.json se relee
+      # de verdad en cada pasada.
+      - ./:/app:ro
       # Estado fuera del repo (regla 5): nombre de álbum → id en Immich, última pasada.
       - /volume1/docker/mediastack-data/auto-albums:/estado
     networks:
