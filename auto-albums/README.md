@@ -1,7 +1,7 @@
 # auto-albums — álbumes de Immich que se rellenan solos por persona
 
-Immich v3.3 no tiene álbumes automáticos por persona. Sus *Workflows* (desde v3.0) todavía no
-filtran por cara ni tienen la acción «añadir a álbum». Este contenedor lo suple con la API
+Immich v3.3 no tiene álbumes automáticos por persona. Sus *Workflows* (desde v3.0) tienen la
+acción «añadir a álbum», pero no filtran por cara. Este contenedor lo suple con la API
 pública de Immich: cada noche busca las fotos y vídeos en los que sale cada persona
 configurada y deja el álbum al día.
 
@@ -27,12 +27,23 @@ Para cada álbum de `config.json`:
    si no existe, lo crea en la cuenta de la clave.
 4. Añade lo que falte. En `"modo": "espejo"` también **quita lo que sobre**, incluidas las
    fotos añadidas a mano. En `"modo": "anadir"` no quita nunca nada.
+5. Repite 1, 2 y 4 para cada entrada de `"otras_cuentas"`, con la clave de esa cuenta. Ver
+   [Fotos de otra cuenta](#fotos-de-otra-cuenta-en-el-mismo-álbum).
+
+Cada clave solo ve **sus propias** fotos dentro del álbum: en Immich v3.3.5, buscar solo por
+álbum se limita al usuario de la clave. Así que el modo espejo de una cuenta nunca toca las
+fotos que otra cuenta haya puesto en un álbum compartido.
+
+Una persona con `"opcional": true` que no existe para la clave se salta sin error (no se
+admite junto a `"requiere_todas"`). Si ninguna de las personas del álbum existe, sí es error.
 
 Frenos:
 
 - Si la búsqueda no devuelve nada, no se toca el álbum.
 - Si hubiera que quitar más del 50 % del álbum, esa pasada no quita nada y lo apunta en el log.
 - Cualquier error de la API para ese álbum antes de escribir. Los demás álbumes siguen.
+- Un fallo en otra cuenta (clave que falta, álbum no compartido) se apunta como error,
+  pero no deshace ni impide lo de la cuenta principal.
 
 ## Ficheros
 
@@ -41,8 +52,8 @@ Frenos:
 | `auto_albums.py` | El script. Solo usa la biblioteca estándar de Python 3.10+ |
 | `config.json` | Álbumes → personas. **Se relee en cada pasada**: cambiarlo no exige reiniciar (la carpeta se monta entera en `/app`, ver el compose) |
 | `docker-compose.yml` | Contenedor `auto-albums` (`python:3.12-alpine`, sin build, 64 MB) en `mediastack-net` |
-| `.env.example` | Plantilla de `.env` (`IMMICH_API_KEY`). `.env` no va al repo |
-| `test_auto_albums.py` | 12 pruebas contra un Immich simulado: `python -m unittest test_auto_albums.py` |
+| `.env.example` | Plantilla de `.env` (`IMMICH_API_KEY`, `IMMICH_API_KEY_MARI`). `.env` no va al repo |
+| `test_auto_albums.py` | 21 pruebas contra un Immich simulado con dos usuarios: `python -m unittest test_auto_albums.py` |
 
 Estado (fuera del repo): `/volume1/docker/mediastack-data/auto-albums/estado.json`. Guarda
 el nombre de cada álbum con su id y el resultado de la última pasada.
@@ -54,6 +65,7 @@ el nombre de cada álbum con su id y el resultado de la última pasada.
 | Papá y Mamá | Jaime Ruiz Cañada **o** Mari Herrero | espejo |
 | Papá y Mamá juntos | Jaime Ruiz Cañada **y** Mari Herrero en la misma foto (`requiere_todas`) | espejo |
 | Nietos | Guillermo Ruiz España **o** Mía Magallon **o** India Magallon | espejo |
+| ↳ cuenta de Mari Herrero | sus fotos de los mismos tres | añadir · **desactivada** hasta tener su clave |
 
 Hora: cada día a las **04:00** (Europe/Madrid), y una pasada al arrancar el contenedor.
 
@@ -64,6 +76,36 @@ Hora: cada día a las **04:00** (Europe/Madrid), y una pasada al arrancar el con
 2. Añade una entrada a `albumes` en `config.json` (por PR, como todo el repo).
 3. `git pull` en el NAS. La siguiente pasada lo recoge. Para no esperar:
    `docker exec auto-albums python /app/auto_albums.py --una-vez`.
+
+## Fotos de otra cuenta en el mismo álbum
+
+Immich solo deja añadir a un álbum fotos propias, y las personas son de cada usuario. Para
+que en «Nietos» (de Jaime) entren también las fotos de Mari:
+
+1. El álbum se comparte con ella como **editora** (ya hecho).
+2. Su clave, creada **desde su cuenta**, va en `.env` con el nombre que diga `clave_env`.
+3. En `config.json`, dentro del álbum:
+
+```json
+"otras_cuentas": [{
+  "cuenta": "Mari Herrero",
+  "clave_env": "IMMICH_API_KEY_MARI",
+  "activo": true,
+  "modo": "anadir",
+  "personas": [{"id": "<id de la persona en SU cuenta>", "nombre": "Guillermo Ruiz España"}]
+}]
+```
+
+El id es el de la persona **en la cuenta de ella** (sale en la URL cuando ella abre la
+persona). `"modo": "anadir"` es lo recomendado: si Mari añade a mano una foto que el
+reconocimiento no ve, no desaparece. Su clave necesita `person.read`, `asset.read`,
+`album.read` y `albumAsset.create`, y también `albumAsset.delete` solo si se pone en espejo.
+
+**Grupo de reconocimiento compartido.** Si los dos usuarios están en el mismo grupo
+(invitación que el otro acepta), una cara nueva de uno puede quedar bajo el id de persona
+del otro. Por eso en «Nietos» cada lado lleva los ids del otro como `"opcional": true`.
+**No usar «regenerar personas» del grupo**: borra las personas que se quedan sin caras
+automáticas, con sus nombres (ver «Trampas» en `HANDOFF.md`).
 
 ## Clave de API
 

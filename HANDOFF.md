@@ -26,7 +26,7 @@ Tiempos medidos: descargar las cinco imágenes, **~6 min**; primer arranque de I
 
 ## Álbumes automáticos por persona (2026-11-01)
 
-Immich v3.3 no los trae: sus *Workflows* aún no filtran por cara ni añaden a álbumes. El
+Immich v3.3 no los trae: sus *Workflows* saben añadir a un álbum, pero no filtrar por cara. El
 contenedor **`auto-albums`** (`auto-albums/`, ver su `README.md`) lo suple con la API: cada
 noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de sus personas.
 
@@ -41,6 +41,22 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
   `album.read`, `album.create`, `albumAsset.create` y `albumAsset.delete`, en
   `auto-albums/.env` (600). Sin ella el contenedor no se arranca.
 - Estado en `/volume1/docker/mediastack-data/auto-albums/estado.json`.
+- **Fotos de Mari Herrero en «Nietos»** (pedido el 2026-11-04). El álbum ya está compartido
+  con ella como **editora**. `config.json` lleva una entrada `otras_cuentas` para su cuenta,
+  en modo **añadir** (nunca quita nada suyo), **desactivada** (`"activo": false`) hasta que
+  haya clave. Sus personas no tienen nombre: los ids de Guillermo (22 fotos), Mía (64) e
+  India (101) se sacaron comparando sus caras con las de Jaime (distancia coseno media
+  0,34-0,38, frente a más de 0,58 con los otros dos niños). Un cuarto grupo de 5 fotos, que
+  se parece a Guillermo con 0,46, se dejó fuera por dudoso. Para activarlo:
+  1. En la cuenta de Mari: crear una clave con `person.read`, `asset.read`, `album.read` y
+     `albumAsset.create`, y ponerla en `auto-albums/.env` como `IMMICH_API_KEY_MARI`.
+  2. Cambiar `"activo"` a `true` (por PR) y comprobar con `--simular`.
+  3. Mejor si Mari pone nombre a esas tres personas: el log avisa si no coinciden.
+- **Invitaciones al grupo de reconocimiento** (`cluster_group_request`): el 2026-10-28 Jaime
+  invitó a Mari, a maria.espana y a mjmoullate. Ninguno las ha aceptado (a 2026-11-04).
+  Aceptar **no hace falta** para el álbum. Si Mari acepta, sus caras nuevas pueden quedar
+  bajo los ids de Jaime y al revés. Por eso cada lado lleva los ids del otro como
+  `"opcional": true`.
 
 ## Música en Jellyfin (2026-10-31)
 
@@ -142,6 +158,20 @@ Hecho eso, se quitan del repo los ficheros que solo servían al mini PC: `wsl/`,
   un contenedor de usar y tirar (`docker run --rm -v /volume1/photo:/x:ro alpine ls /x`). Un
   `du` sobre 200.000 ficheros no acaba en el minuto del MCP, y el contenedor sigue vivo
   después del corte: pararlo.
+
+- **No pulsar «regenerar personas» de un grupo de reconocimiento** (`POST
+  /api/cluster-groups/{id}/regenerate-people`). Hace `FacialRecognitionQueueAll` con
+  `force`: quita todas las caras asignadas por ML en el grupo y borra las personas que se
+  quedan sin caras, **con su nombre** (solo se salvan las caras asignadas a mano). Se
+  perderían los 59 nombres de Jaime y los ids de `auto-albums/config.json`, con lo que los
+  álbumes automáticos se pararían. Visto en el código de v3.3.5 (`person.service.js`,
+  `handleQueueRecognizeFaces`) el 2026-11-04.
+- **En Immich v3.3 el id de una persona es su `personGroupId`**: la tabla `person` no tiene
+  columna `id`. La clave es (`ownerId`, `personGroupId`).
+- **Buscar por álbum solo devuelve las fotos propias** (`searchAssetsV3` con solo
+  `albumIds`: `userIds = [usuario de la clave]`). Por eso el modo espejo de una clave nunca
+  ve ni quita las fotos que otro usuario ha añadido a un álbum compartido. Y para añadir
+  fotos de otro usuario hace falta la clave de ese usuario (`AssetShare`: solo fotos propias).
 
 ## Comprobación
 
