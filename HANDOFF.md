@@ -50,7 +50,7 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
 - **Fotos de Mari Herrero en «Nietos»** (pedido el 2026-11-04). El álbum ya está compartido
   con ella como **editora**. `config.json` lleva una entrada `otras_cuentas` para su cuenta,
   en modo **añadir** (nunca quita nada suyo). Estuvo desactivada (`"activo": false`) hasta que
-  haya clave. Sus personas no tienen nombre: los ids de Guillermo (22 fotos), Mía (64) e
+  hubo clave. Sus personas no tenían nombre: los ids de Guillermo (22 fotos), Mía (64) e
   India (101) se sacaron comparando sus caras con las de Jaime (distancia coseno media
   0,34-0,38, frente a más de 0,58 con los otros dos niños). Un cuarto grupo de 5 fotos, que
   se parece a Guillermo con 0,46, se dejó fuera por dudoso. Para activarlo:
