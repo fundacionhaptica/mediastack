@@ -27,3 +27,6 @@ homepage/config/docker.yaml
 homepage/config/kubernetes.yaml
 homepage/config/custom.css
 homepage/config/custom.js
+
+# Python
+__pycache__/
