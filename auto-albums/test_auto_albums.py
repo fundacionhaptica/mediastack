@@ -34,6 +34,14 @@ class Falso:
             self.dueno[f"b{i}"] = "u2"
         self.albumes = {}   # id -> {"albumName", "assets": set(), "usuarios": set()}
         self.peticiones = []
+        # Para las copias de WhatsApp: fecha, datos de cámara y fotos parecidas por asset.
+        self.fecha = {}       # asset -> fileCreatedAt (por defecto FECHA)
+        self.sin_exif = set() # assets sin marca ni modelo (como deja WhatsApp)
+        self.parecidas = {}   # asset -> [assets de más a menos parecido]
+        self.sin_huella = set()
+
+
+FECHA = "2026-10-01T10:00:00.000Z"
 
 
 def manejador(f: Falso):
@@ -60,6 +68,14 @@ def manejador(f: Falso):
                 return self._resp(401, {"message": "Invalid API key"})
             c = self._cuerpo()
             p = self.path
+
+            def item(i, con_exif):
+                d = {"id": i, "ownerId": f.dueno[i], "fileCreatedAt": f.fecha.get(i, FECHA),
+                     "originalFileName": f"{i}.jpg"}
+                if con_exif:
+                    d["exifInfo"] = ({"make": None, "model": None} if i in f.sin_exif
+                                     else {"make": "Apple", "model": "iPhone"})
+                return d
 
             def ve(aid):
                 al = f.albumes.get(aid)
@@ -105,8 +121,23 @@ def manejador(f: Falso):
                 trozo = ids[ini:ini + c["size"]]
                 sig = str(ini + c["size"]) if ini + c["size"] < len(ids) else None
                 return self._resp(200, {"albums": {}, "assets": {
-                    "items": [{"id": i, "ownerId": f.dueno[i]} for i in trozo],
+                    "items": [item(i, c.get("withExif")) for i in trozo],
                     "count": len(trozo), "nextCursor": sig}})
+            if metodo == "POST" and p == "/api/search/smart":
+                filt = c["filter"]
+                assert filt.get("visibility") == {"in": ["timeline", "archive"]}
+                q, aid = c["queryAssetId"], filt["albumIds"]["any"][0]
+                if not ve(aid):
+                    return self._resp(400, {"message": "Not found or no album.read access"})
+                if f.dueno.get(q) != yo and q not in f.albumes[aid]["assets"]:
+                    return self._resp(400, {"message": "Not found or no asset.read access"})
+                if q in f.sin_huella:
+                    return self._resp(400, {"message": f"Asset {q} has no embedding"})
+                en_album = f.albumes[aid]["assets"]
+                orden = [q] + f.parecidas.get(q, [])
+                ids = [i for i in orden if i in en_album][:c["size"]]
+                return self._resp(200, {"albums": {}, "assets": {
+                    "items": [item(i, False) for i in ids], "count": len(ids), "nextCursor": None}})
             if p.startswith("/api/albums/") and p.endswith("/assets"):
                 aid = p.split("/")[3]
                 assert len(c["ids"]) <= aa.LOTE
@@ -323,6 +354,103 @@ class Pruebas(unittest.TestCase):
         self.cfg["albumes"][0]["personas"].append({"id": P3, "opcional": True})
         self.assertFalse(aa.pasada(self.api, self.cfg, self.estado, False))
         self.assertEqual(self.f.albumes, {})
+
+
+    # --- copias de WhatsApp de la otra cuenta ---------------------------------------
+    def preparar_copias(self, modo="activo", **extra):
+        """b0 y b6: copias de a5 y a9 (sin cámara, original poco antes). b1: el parecido
+        es de hace un año. b2: tiene datos de cámara. b3: la más parecida es suya. b5: sin
+        huella todavía."""
+        self.con_otra_cuenta(duplicados=dict({"modo": modo}, **extra))
+        aa.pasada(self.api, self.cfg, self.estado, False)   # crea el álbum
+        self.compartir()
+        f = self.f
+        f.sin_exif |= {"b0", "b1", "b3", "b5", "b6"}
+        f.fecha.update({"b0": "2026-10-02T09:00:00.000Z", "b1": "2026-10-02T09:00:00.000Z",
+                        "b2": "2026-10-02T09:00:00.000Z", "b3": "2026-10-02T09:00:00.000Z",
+                        "b6": "2026-10-01T09:30:00.000Z",       # 30 min ANTES del original
+                        "a6": "2025-10-01T10:00:00.000Z"})
+        f.parecidas.update({"b0": ["a5", "b9"], "b1": ["a6"], "b2": ["a7"],
+                            "b3": ["b4", "a8"], "b5": ["a1"], "b6": ["a9"]})
+        f.sin_huella.add("b5")
+        self.album().add("b4")   # la gemela de b3 ya está en el álbum (si no, no sale)
+        self.logs = []
+        orig = aa.log
+        aa.log = self.logs.append
+        self.addCleanup(setattr, aa, "log", orig)
+
+    def test_duplicados_en_simulacion_no_cambian_nada(self):
+        self.preparar_copias("simular")
+        self.assertTrue(aa.pasada(self.api, self.cfg, self.estado, False))
+        self.assertEqual(len(self.album()), 2100 + 250)
+        txt = "\n".join(self.logs)
+        self.assertIn("se descartaría b0", txt)
+        self.assertIn("se descartaría b6", txt)
+        self.assertIn("2 copias", txt)
+        self.assertIn("1 aún sin huella", txt)
+
+    def test_duplicados_activo_no_anade_las_copias(self):
+        self.preparar_copias("activo")
+        self.assertTrue(aa.pasada(self.api, self.cfg, self.estado, False))
+        al = self.album()
+        self.assertNotIn("b0", al)
+        self.assertNotIn("b6", al)
+        for b in ("b1", "b2", "b3", "b5", "b9"):
+            self.assertIn(b, al)
+        self.assertEqual(len(al), 2100 + 248)  # 250 menos b0 y b6
+
+    def test_duplicados_activo_quita_las_copias_ya_metidas(self):
+        self.preparar_copias("simular")
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        self.assertIn("b0", self.album())
+        self.cfg["albumes"][0]["otras_cuentas"][0]["duplicados"]["modo"] = "activo"
+        self.assertTrue(aa.pasada(self.api, self.cfg, self.estado, False))
+        self.assertNotIn("b0", self.album())
+        self.assertNotIn("b6", self.album())
+        self.assertIn("b1", self.album())
+        self.assertIn("a5", self.album())     # el original nunca se toca
+
+    def test_duplicados_ventana_de_dias(self):
+        self.preparar_copias("activo", dias=0.5)  # 12 h: b0 (23 h) ya no es copia
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        self.assertIn("b0", self.album())
+        self.assertNotIn("b6", self.album())
+
+    def test_duplicados_con_simular_global_no_escriben(self):
+        self.preparar_copias("simular")
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        self.cfg["albumes"][0]["otras_cuentas"][0]["duplicados"]["modo"] = "activo"
+        self.f.peticiones.clear()
+        self.assertTrue(aa.pasada(self.api, self.cfg, self.estado, True))
+        self.assertFalse([x for x in self.f.peticiones if x[0] in ("PUT", "DELETE")])
+        self.assertIn("b0", self.album())
+
+    def test_duplicados_freno(self):
+        self.preparar_copias("simular")
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        for i in range(10, 200):              # 190 de 250 pasan a ser copias de a1
+            self.f.sin_exif.add(f"b{i}")
+            self.f.parecidas[f"b{i}"] = ["a1"]
+        self.cfg["albumes"][0]["otras_cuentas"][0]["duplicados"]["modo"] = "activo"
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        self.assertEqual(len(self.album()), 2100 + 250)
+        self.assertTrue(any("FRENO" in x for x in self.logs))
+
+    def test_duplicados_config_mala_es_error_de_esa_cuenta(self):
+        for mala in ({"modo": "si"}, {"modo": "activo", "dias": 0},
+                     {"modo": "activo", "dias": "7"}, {"modo": "activo", "dias": True}):
+            with self.assertRaises(aa.ErrorImmich):
+                aa.leer_cfg_duplicados("x", {"duplicados": mala})
+        self.preparar_copias("si")
+        self.assertFalse(aa.pasada(self.api, self.cfg, self.estado, False))
+        self.assertNotIn("b0", self.album())
+        self.assertEqual(len(self.album()), 2100 + 1)   # lo de la principal sí (y b4, puesta a mano)
+
+    def test_duplicados_no_desactiva(self):
+        self.preparar_copias("no")
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        self.assertIn("b0", self.album())
+        self.assertFalse([x for x in self.f.peticiones if x[1] == "/api/search/smart"])
 
 
 if __name__ == "__main__":

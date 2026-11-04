@@ -70,6 +70,10 @@
           "clave_env": "IMMICH_API_KEY_MARI",
           "activo": true,
           "modo": "anadir",
+          "duplicados": {
+            "modo": "simular",
+            "dias": 7
+          },
           "personas": [
             {
               "id": "b7b78c4c-223a-4f85-a04d-b04f2d720b26",
