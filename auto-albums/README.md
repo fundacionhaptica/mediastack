@@ -30,9 +30,10 @@ Para cada álbum de `config.json`:
 5. Repite 1, 2 y 4 para cada entrada de `"otras_cuentas"`, con la clave de esa cuenta. Ver
    [Fotos de otra cuenta](#fotos-de-otra-cuenta-en-el-mismo-álbum).
 
-Cada clave solo ve **sus propias** fotos dentro del álbum: en Immich v3.3.5, buscar solo por
-álbum se limita al usuario de la clave. Así que el modo espejo de una cuenta nunca toca las
-fotos que otra cuenta haya puesto en un álbum compartido.
+Al buscar dentro de un álbum, Immich (v3.3.5) devuelve las fotos de **todos** sus miembros.
+Por eso el modo espejo solo quita fotos **de las que es dueña la cuenta de la clave**
+(`ownerId`, mirado con `GET /api/users/me`). Las que otra cuenta haya puesto en un álbum
+compartido no las toca nunca. El freno del 50 % se calcula también sobre las fotos propias.
 
 Una persona con `"opcional": true` que no existe para la clave se salta sin error (no se
 admite junto a `"requiere_todas"`). Si ninguna de las personas del álbum existe, sí es error.
@@ -53,7 +54,7 @@ Frenos:
 | `config.json` | Álbumes → personas. **Se relee en cada pasada**: cambiarlo no exige reiniciar (la carpeta se monta entera en `/app`, ver el compose) |
 | `docker-compose.yml` | Contenedor `auto-albums` (`python:3.12-alpine`, sin build, 64 MB) en `mediastack-net` |
 | `.env.example` | Plantilla de `.env` (`IMMICH_API_KEY`, `IMMICH_API_KEY_MARI`). `.env` no va al repo |
-| `test_auto_albums.py` | 21 pruebas contra un Immich simulado con dos usuarios: `python -m unittest test_auto_albums.py` |
+| `test_auto_albums.py` | 23 pruebas contra un Immich simulado con dos usuarios: `python -m unittest test_auto_albums.py` |
 
 Estado (fuera del repo): `/volume1/docker/mediastack-data/auto-albums/estado.json`. Guarda
 el nombre de cada álbum con su id y el resultado de la última pasada.
@@ -65,7 +66,7 @@ el nombre de cada álbum con su id y el resultado de la última pasada.
 | Papá y Mamá | Jaime Ruiz Cañada **o** Mari Herrero | espejo |
 | Papá y Mamá juntos | Jaime Ruiz Cañada **y** Mari Herrero en la misma foto (`requiere_todas`) | espejo |
 | Nietos | Guillermo Ruiz España **o** Mía Magallon **o** India Magallon | espejo |
-| ↳ cuenta de Mari Herrero | sus fotos de los mismos tres | añadir · **desactivada** hasta tener su clave |
+| ↳ cuenta de Mari Herrero | sus fotos de los mismos tres | añadir (activa desde el 2026-11-04) |
 
 Hora: cada día a las **04:00** (Europe/Madrid), y una pasada al arrancar el contenedor.
 
@@ -99,7 +100,8 @@ que en «Nietos» (de Jaime) entren también las fotos de Mari:
 El id es el de la persona **en la cuenta de ella** (sale en la URL cuando ella abre la
 persona). `"modo": "anadir"` es lo recomendado: si Mari añade a mano una foto que el
 reconocimiento no ve, no desaparece. Su clave necesita `person.read`, `asset.read`,
-`album.read` y `albumAsset.create`, y también `albumAsset.delete` solo si se pone en espejo.
+`album.read` y `albumAsset.create`. Si se pone en espejo, también `albumAsset.delete` y
+`user.read`.
 
 **Grupo de reconocimiento compartido.** Si los dos usuarios están en el mismo grupo
 (invitación que el otro acepta), una cara nueva de uno puede quedar bajo el id de persona
@@ -115,7 +117,8 @@ Las personas de Immich son por usuario: las de Jaime solo las ve la clave de Jai
 Immich → avatar → *Ajustes de la cuenta → Claves de API → Nueva clave*, con **solo** estos
 permisos:
 
-`person.read`, `asset.read`, `album.read`, `album.create`, `albumAsset.create`, `albumAsset.delete`
+`person.read`, `asset.read`, `album.read`, `album.create`, `albumAsset.create`,
+`albumAsset.delete`, `user.read` (este último, para saber qué fotos son suyas en modo espejo)
 
 Va en `auto-albums/.env` (`chmod 600`, dueño `1026:100`).
 

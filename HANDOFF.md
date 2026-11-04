@@ -38,20 +38,29 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
 - Tercer álbum (2026-11-02): **Nietos** = fotos donde sale Guillermo Ruiz España, Mía
   Magallon o India Magallon, en espejo.
 - Necesita una clave de API de la cuenta de Jaime con solo `person.read`, `asset.read`,
-  `album.read`, `album.create`, `albumAsset.create` y `albumAsset.delete`, en
-  `auto-albums/.env` (600). Sin ella el contenedor no se arranca.
+  `album.read`, `album.create`, `albumAsset.create`, `albumAsset.delete` y `user.read`,
+  en `auto-albums/.env` (600). Sin ella el contenedor no se arranca.
+- **Pendiente (visto el 2026-11-04):** las dos claves de `.env` tienen permiso **`all`**.
+  `IMMICH_API_KEY` es la clave «claude-migracion» de Jaime y `IMMICH_API_KEY_MARI` es
+  «API Key-claude» de Mari. Además, la de Mari pasó por un chat. Conviene crear dos claves
+  nuevas con solo los permisos de arriba (los de Mari: `person.read`, `asset.read`,
+  `album.read`, `albumAsset.create`), cambiarlas en `.env`, recrear el contenedor y
+  borrar las viejas en Immich.
 - Estado en `/volume1/docker/mediastack-data/auto-albums/estado.json`.
 - **Fotos de Mari Herrero en «Nietos»** (pedido el 2026-11-04). El álbum ya está compartido
   con ella como **editora**. `config.json` lleva una entrada `otras_cuentas` para su cuenta,
-  en modo **añadir** (nunca quita nada suyo), **desactivada** (`"activo": false`) hasta que
-  haya clave. Sus personas no tienen nombre: los ids de Guillermo (22 fotos), Mía (64) e
+  en modo **añadir** (nunca quita nada suyo). Estuvo desactivada (`"activo": false`) hasta que
+  hubo clave. Sus personas no tenían nombre: los ids de Guillermo (22 fotos), Mía (64) e
   India (101) se sacaron comparando sus caras con las de Jaime (distancia coseno media
   0,34-0,38, frente a más de 0,58 con los otros dos niños). Un cuarto grupo de 5 fotos, que
   se parece a Guillermo con 0,46, se dejó fuera por dudoso. Para activarlo:
   1. En la cuenta de Mari: crear una clave con `person.read`, `asset.read`, `album.read` y
      `albumAsset.create`, y ponerla en `auto-albums/.env` como `IMMICH_API_KEY_MARI`.
-  2. Cambiar `"activo"` a `true` (por PR) y comprobar con `--simular`.
-  3. Mejor si Mari pone nombre a esas tres personas: el log avisa si no coinciden.
+     **Hecho el 2026-11-04**, aunque con una clave de permiso `all` (ver «Pendiente»).
+  2. Cambiar `"activo"` a `true` (por PR) y comprobar con `--simular`. **Hecho el 2026-11-04.**
+  3. Mari ya ha puesto nombre a las tres personas («Guillermo Ruiz», «Mia Magallon»,
+     «India Magallon»), lo que confirma los ids. La simulación del 2026-11-04 daba 152
+     fotos suyas por añadir.
 - **Invitaciones al grupo de reconocimiento** (`cluster_group_request`): el 2026-10-28 Jaime
   invitó a Mari, a maria.espana y a mjmoullate. Ninguno las ha aceptado (a 2026-11-04).
   Aceptar **no hace falta** para el álbum. Si Mari acepta, sus caras nuevas pueden quedar
@@ -178,10 +187,13 @@ Hecho eso, se quitan del repo los ficheros que solo servían al mini PC: `wsl/`,
   `handleQueueRecognizeFaces`) el 2026-11-04.
 - **En Immich v3.3 el id de una persona es su `personGroupId`**: la tabla `person` no tiene
   columna `id`. La clave es (`ownerId`, `personGroupId`).
-- **Buscar por álbum solo devuelve las fotos propias** (`searchAssetsV3` con solo
-  `albumIds`: `userIds = [usuario de la clave]`). Por eso el modo espejo de una clave nunca
-  ve ni quita las fotos que otro usuario ha añadido a un álbum compartido. Y para añadir
-  fotos de otro usuario hace falta la clave de ese usuario (`AssetShare`: solo fotos propias).
+- **Buscar por álbum devuelve las fotos de TODOS los miembros**, no solo las de la clave.
+  El 2026-11-04 se dio por hecho lo contrario leyendo el servicio (`userIds = [usuario]`),
+  y la prueba real lo desmintió: la clave de Mari vio las 3.541 fotos de Jaime en
+  «Nietos». Por eso el modo espejo solo quita fotos cuyo `ownerId` es el de la clave
+  (`GET /api/users/me`, permiso `user.read`). Lección: **probar contra el Immich real
+  antes de fiarse de una lectura del código**. Para añadir fotos de otro usuario sí hace
+  falta su clave (`AssetShare`: solo fotos propias; esto sí se ha comprobado).
 
 ## Comprobación
 

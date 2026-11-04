@@ -65,6 +65,8 @@ def manejador(f: Falso):
                 al = f.albumes.get(aid)
                 return al is not None and yo in al["usuarios"]
 
+            if metodo == "GET" and p == "/api/users/me":
+                return self._resp(200, {"id": yo})
             if metodo == "GET" and p.startswith("/api/people/"):
                 pid = p.rsplit("/", 1)[1]
                 if pid in f.personas and f.personas[pid][0] == yo:
@@ -84,25 +86,27 @@ def manejador(f: Falso):
                 assert "page" not in c and "personIds" not in c, "forma antigua"
                 filt = c["filter"]
                 assert filt.get("visibility") == {"in": ["timeline", "archive"]}
-                # Como Immich v3.3.5: cada clave solo ve sus propios assets, también
-                # al buscar dentro de un álbum compartido.
+                # Como Immich v3.3.5 (comprobado en el NAS el 2026-11-04): por persona,
+                # solo assets propios; dentro de un álbum, los de TODOS sus miembros.
                 if "personIds" in filt:
                     pf = filt["personIds"]
                     if "any" in pf:
                         ids = [a for a, ps in f.assets.items() if ps & set(pf["any"])]
                     else:
                         ids = [a for a, ps in f.assets.items() if set(pf["all"]) <= ps]
+                    ids = [a for a in ids if f.dueno[a] == yo]
                 else:
                     aid = filt["albumIds"]["any"][0]
                     if not ve(aid):
                         return self._resp(400, {"message": "Not found or no album.read access"})
                     ids = f.albumes[aid]["assets"]
-                ids = sorted(a for a in ids if f.dueno[a] == yo)
+                ids = sorted(ids)
                 ini = int(c.get("cursor") or 0)
                 trozo = ids[ini:ini + c["size"]]
                 sig = str(ini + c["size"]) if ini + c["size"] < len(ids) else None
                 return self._resp(200, {"albums": {}, "assets": {
-                    "items": [{"id": i} for i in trozo], "count": len(trozo), "nextCursor": sig}})
+                    "items": [{"id": i, "ownerId": f.dueno[i]} for i in trozo],
+                    "count": len(trozo), "nextCursor": sig}})
             if p.startswith("/api/albums/") and p.endswith("/assets"):
                 aid = p.split("/")[3]
                 assert len(c["ids"]) <= aa.LOTE
@@ -255,7 +259,30 @@ class Pruebas(unittest.TestCase):
         self.album().add("b299")              # añadida a mano por la otra cuenta
         self.cfg["albumes"][0]["otras_cuentas"][0]["activo"] = False
         self.assertTrue(aa.pasada(self.api, self.cfg, self.estado, False))
-        self.assertEqual(len(self.album()), 2100 + 251)  # espejo de u1 no ve ni quita lo de u2
+        self.assertEqual(len(self.album()), 2100 + 251)  # espejo de u1 ve lo de u2 pero no lo quita
+
+    def test_freno_cuenta_solo_las_propias(self):
+        # 2100 propias + 2000 ajenas: quitar 1500 propias supera la mitad de las propias
+        # aunque no la del álbum entero, y el freno tiene que saltar.
+        self.con_otra_cuenta()
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        self.compartir()
+        for i in range(2000):
+            self.f.dueno[f"c{i}"] = "u2"
+            self.f.assets[f"c{i}"] = set()
+            self.album().add(f"c{i}")
+        for i in range(0, 1500):
+            self.f.assets[f"a{i}"].clear()
+        self.cfg["albumes"][0]["otras_cuentas"][0]["activo"] = False
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        self.assertEqual(len(self.album()), 2100 + 2000)
+
+    def test_espejo_sin_user_read_no_toca(self):
+        aa.pasada(self.api, self.cfg, self.estado, False)
+        self.album().add("a2400")
+        self.api.yo = lambda: (_ for _ in ()).throw(aa.ErrorImmich("GET /api/users/me → HTTP 403"))
+        self.assertFalse(aa.pasada(self.api, self.cfg, self.estado, False))
+        self.assertIn("a2400", self.album())
 
     def test_otra_cuenta_en_modo_anadir_no_quita(self):
         self.con_otra_cuenta()
