@@ -47,6 +47,58 @@
         {
           "id": "d932d521-4596-43d4-82af-c3b38a54e5b8",
           "nombre": "India Magallon"
+        },
+        {
+          "id": "b7b78c4c-223a-4f85-a04d-b04f2d720b26",
+          "nombre": "Guillermo Ruiz España",
+          "opcional": true
+        },
+        {
+          "id": "1da5b98a-4d47-4fa5-bf6d-cd738f5bc050",
+          "nombre": "Mía Magallon",
+          "opcional": true
+        },
+        {
+          "id": "33e873ff-eac2-40bc-a686-3b66e2d2916d",
+          "nombre": "India Magallon",
+          "opcional": true
+        }
+      ],
+      "otras_cuentas": [
+        {
+          "cuenta": "Mari Herrero",
+          "clave_env": "IMMICH_API_KEY_MARI",
+          "activo": false,
+          "modo": "anadir",
+          "personas": [
+            {
+              "id": "b7b78c4c-223a-4f85-a04d-b04f2d720b26",
+              "nombre": "Guillermo Ruiz España"
+            },
+            {
+              "id": "1da5b98a-4d47-4fa5-bf6d-cd738f5bc050",
+              "nombre": "Mía Magallon"
+            },
+            {
+              "id": "33e873ff-eac2-40bc-a686-3b66e2d2916d",
+              "nombre": "India Magallon"
+            },
+            {
+              "id": "be09205f-4579-444a-90ef-acfbfb75a305",
+              "nombre": "Guillermo Ruiz España",
+              "opcional": true
+            },
+            {
+              "id": "52129450-a1cc-45f1-828c-735a243634c1",
+              "nombre": "Mía Magallon",
+              "opcional": true
+            },
+            {
+              "id": "d932d521-4596-43d4-82af-c3b38a54e5b8",
+              "nombre": "India Magallon",
+              "opcional": true
+            }
+          ]
         }
       ]
     }

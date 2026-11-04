@@ -2,14 +2,17 @@
 """
 auto-albums — álbumes de Immich que se rellenan solos a partir de personas reconocidas.
 
-Immich (v3.3) no tiene "álbumes automáticos por persona": sus Workflows aún no filtran por
-cara ni añaden a álbumes. Este script lo suple con la API pública:
+Immich (v3.3) no tiene "álbumes automáticos por persona": sus Workflows saben añadir a un
+álbum, pero no filtrar por cara. Este script lo suple con la API pública:
 
   1. Para cada álbum de config.json, busca todas las fotos/vídeos en los que sale
      cualquiera de sus personas (POST /api/search/metadata, filtro personIds.any).
   2. Añade al álbum lo que falte (PUT /api/albums/{id}/assets).
   3. En modo "espejo", quita del álbum lo que ya no corresponde
      (DELETE /api/albums/{id}/assets) — p. ej. tras corregir una cara mal asignada.
+  4. Con "otras_cuentas", repite 1-3 con la clave de otro usuario con quien el álbum está
+     compartido como editor, para que entren también SUS fotos (Immich solo deja añadir
+     a un álbum fotos propias, y cada clave solo ve sus fotos dentro del álbum).
 
 Sin dependencias: solo la biblioteca estándar de Python 3.10+.
 
@@ -21,6 +24,7 @@ Uso:
 Variables de entorno:
   IMMICH_URL        p. ej. http://immich_server:2283
   IMMICH_API_KEY    clave de API del usuario dueño de las personas y de los álbumes
+  IMMICH_API_KEY_*  claves de otras cuentas, con el nombre que diga "clave_env" en config.json
   CONFIG            ruta de config.json        (por defecto /config/config.json)
   ESTADO            ruta del fichero de estado  (por defecto /estado/estado.json)
   HORA              hora diaria HH:MM, local    (por defecto la de config.json, o 04:00)
@@ -110,6 +114,14 @@ class Immich:
     def persona(self, persona_id: str) -> dict:
         return self._peticion("GET", f"/api/people/{persona_id}")
 
+    def persona_o_nada(self, persona_id: str) -> dict | None:
+        try:
+            return self.persona(persona_id)
+        except ErrorImmich as e:
+            if "HTTP 400" in str(e) or "HTTP 404" in str(e):
+                return None
+            raise
+
     def album(self, album_id: str) -> dict | None:
         try:
             return self._peticion("GET", f"/api/albums/{album_id}")
@@ -175,31 +187,30 @@ def resolver_album(api: Immich, nombre: str, estado: dict, simular: bool) -> str
     return album_id
 
 
-def sincronizar_album(api: Immich, cfg: dict, estado: dict, simular: bool) -> None:
-    nombre = cfg["nombre"]
-    modo = cfg.get("modo", "anadir")
-    if modo not in ("anadir", "espejo"):
-        raise ErrorImmich(f"«{nombre}»: modo «{modo}» no válido (anadir | espejo)")
-    personas = [p["id"] for p in cfg["personas"]]
-    if not personas:
-        raise ErrorImmich(f"«{nombre}»: sin personas")
-
-    # Validar personas (y que la clave es del usuario correcto) antes de tocar nada.
-    nombres = []
-    for p in cfg["personas"]:
-        real = api.persona(p["id"]).get("name") or "(sin nombre)"
-        if p.get("nombre") and real.strip() != p["nombre"].strip():
+def validar_personas(api: Immich, nombre: str, personas_cfg: list[dict]) -> tuple[list[str], list[str]]:
+    """Ids y nombres de las personas que existen para esta clave, antes de tocar nada.
+    Una persona obligatoria que no existe para la clave es un error (clave equivocada, id
+    mal copiado). Una "opcional" se salta: sirve para poner los ids de las dos cuentas en
+    las dos fuentes, porque con el grupo de reconocimiento compartido una foto nueva puede
+    quedar bajo el id de la otra cuenta."""
+    ids, nombres = [], []
+    for p in personas_cfg:
+        datos = api.persona_o_nada(p["id"]) if p.get("opcional") else api.persona(p["id"])
+        if datos is None:
+            continue
+        real = (datos.get("name") or "").strip()
+        if p.get("nombre") and real and real != p["nombre"].strip():
             log(f"  aviso: la persona {p['id']} se llama «{real}» en Immich, no «{p['nombre']}»")
-        nombres.append(real.strip())
-    log(f"«{nombre}» [{modo}] ← {' + '.join(nombres)}"
-        f"{' (todas juntas)' if cfg.get('requiere_todas') else ''}")
+        ids.append(p["id"])
+        nombres.append(real or f"{p.get('nombre') or p['id']} (sin nombre en Immich)")
+    if not ids:
+        raise ErrorImmich(f"«{nombre}»: ninguna de sus personas existe para esta clave")
+    return ids, nombres
 
-    deseados = api.assets_de_personas(personas, bool(cfg.get("requiere_todas")))
-    if not deseados:
-        # Una búsqueda vacía nunca debe vaciar un álbum: se para aquí.
-        raise ErrorImmich(f"«{nombre}»: la búsqueda no devuelve nada; no se toca el álbum")
 
-    album_id = resolver_album(api, nombre, estado, simular)
+def aplicar(api: Immich, album_id: str | None, modo: str, deseados: set[str], simular: bool) -> None:
+    """Deja en el álbum lo que pide `deseados`, mirando solo las fotos que esta clave ve
+    dentro del álbum (las suyas: la búsqueda por álbum de Immich se limita al usuario)."""
     actuales = api.assets_del_album(album_id) if album_id else set()
     faltan = sorted(deseados - actuales)
     sobran = sorted(actuales - deseados) if modo == "espejo" else []
@@ -215,9 +226,80 @@ def sincronizar_album(api: Immich, cfg: dict, estado: dict, simular: bool) -> No
         log("  [simulación] no se escribe nada")
         return
     if faltan:
-        log(f"  añadidos: {api.anadir(album_id, faltan)}")
+        hechos = api.anadir(album_id, faltan)
+        log(f"  añadidos: {hechos}")
+        if hechos < len(faltan):
+            log(f"  aviso: {len(faltan) - hechos} no se pudieron añadir (¿fotos de otra cuenta?)")
     if sobran:
         log(f"  quitados: {api.quitar(album_id, sobran)}")
+
+
+def comprobar_modo(nombre: str, modo: str) -> None:
+    if modo not in ("anadir", "espejo"):
+        raise ErrorImmich(f"«{nombre}»: modo «{modo}» no válido (anadir | espejo)")
+
+
+def sincronizar_album(api: Immich, cfg: dict, estado: dict, simular: bool) -> bool:
+    """Sincroniza el álbum con la clave principal y luego con cada una de "otras_cuentas".
+    Devuelve False si falló alguna otra cuenta (la principal falla con excepción)."""
+    nombre = cfg["nombre"]
+    modo = cfg.get("modo", "anadir")
+    comprobar_modo(nombre, modo)
+    if not cfg.get("personas"):
+        raise ErrorImmich(f"«{nombre}»: sin personas")
+    if cfg.get("requiere_todas") and any(
+            p.get("opcional") for p in cfg["personas"] + [x for o in cfg.get("otras_cuentas", [])
+                                                         for x in o.get("personas", [])]):
+        # Saltarse una persona cambiaría qué fotos cumplen "todas a la vez".
+        raise ErrorImmich(f"«{nombre}»: \"opcional\" no vale con \"requiere_todas\"")
+
+    personas, nombres = validar_personas(api, nombre, cfg["personas"])
+    log(f"«{nombre}» [{modo}] ← {' + '.join(nombres)}"
+        f"{' (todas juntas)' if cfg.get('requiere_todas') else ''}")
+
+    deseados = api.assets_de_personas(personas, bool(cfg.get("requiere_todas")))
+    if not deseados:
+        # Una búsqueda vacía nunca debe vaciar un álbum: se para aquí.
+        raise ErrorImmich(f"«{nombre}»: la búsqueda no devuelve nada; no se toca el álbum")
+
+    album_id = resolver_album(api, nombre, estado, simular)
+    aplicar(api, album_id, modo, deseados, simular)
+
+    ok = True
+    for otra in cfg.get("otras_cuentas", []):
+        if otra.get("activo", True) is False:
+            continue
+        try:
+            sincronizar_otra_cuenta(api.url, nombre, album_id, otra, bool(cfg.get("requiere_todas")), simular)
+        except (ErrorImmich, KeyError) as e:
+            ok = False
+            log(f"ERROR en «{nombre}», cuenta «{otra.get('cuenta', '?')}»: {e}")
+    return ok
+
+
+def sincronizar_otra_cuenta(url: str, nombre: str, album_id: str | None, otra: dict,
+                            todas: bool, simular: bool) -> None:
+    """Añade al álbum (de la clave principal) las fotos de otra cuenta, con su propia clave.
+    El álbum tiene que estar compartido con esa cuenta como editor. Por defecto en modo
+    "anadir": nunca quita nada."""
+    cuenta = otra["cuenta"]
+    modo = otra.get("modo", "anadir")
+    comprobar_modo(nombre, modo)
+    clave = os.environ.get(otra["clave_env"], "").strip()
+    if not clave:
+        raise ErrorImmich(f"falta la variable {otra['clave_env']} en .env")
+    if album_id is None:
+        log(f"  [simulación] cuenta «{cuenta}»: el álbum aún no existe, se salta")
+        return
+    api = Immich(url, clave)
+    if not api.album(album_id):
+        raise ErrorImmich("esa cuenta no ve el álbum: compártelo con ella como editora")
+    personas, nombres = validar_personas(api, f"{nombre}/{cuenta}", otra.get("personas", []))
+    log(f"  cuenta «{cuenta}» [{modo}] ← {' + '.join(nombres)}")
+    deseados = api.assets_de_personas(personas, todas)
+    if not deseados and modo == "espejo":
+        raise ErrorImmich("la búsqueda no devuelve nada; no se toca el álbum")
+    aplicar(api, album_id, modo, deseados, simular)
 
 
 def pasada(api: Immich, config: dict, ruta_estado: Path, simular: bool) -> bool:
@@ -227,7 +309,8 @@ def pasada(api: Immich, config: dict, ruta_estado: Path, simular: bool) -> bool:
         if cfg.get("activo", True) is False:
             continue
         try:
-            sincronizar_album(api, cfg, estado, simular)
+            if not sincronizar_album(api, cfg, estado, simular):
+                ok = False
         except (ErrorImmich, KeyError) as e:
             ok = False
             log(f"ERROR en «{cfg.get('nombre', '?')}»: {e}")
