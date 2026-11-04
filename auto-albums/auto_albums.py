@@ -10,9 +10,11 @@ Immich (v3.3) no tiene "álbumes automáticos por persona": sus Workflows saben 
   2. Añade al álbum lo que falte (PUT /api/albums/{id}/assets).
   3. En modo "espejo", quita del álbum lo que ya no corresponde
      (DELETE /api/albums/{id}/assets) — p. ej. tras corregir una cara mal asignada.
+     Solo quita fotos de las que es dueño el usuario de la clave: la búsqueda por álbum
+     devuelve las de todos los miembros, y las de otro usuario no son asunto suyo.
   4. Con "otras_cuentas", repite 1-3 con la clave de otro usuario con quien el álbum está
      compartido como editor, para que entren también SUS fotos (Immich solo deja añadir
-     a un álbum fotos propias, y cada clave solo ve sus fotos dentro del álbum).
+     a un álbum fotos propias).
 
 Sin dependencias: solo la biblioteca estándar de Python 3.10+.
 
@@ -60,6 +62,7 @@ class Immich:
     def __init__(self, url: str, clave: str):
         self.url = url.rstrip("/")
         self.clave = clave
+        self._yo: str | None = None
 
     def _peticion(self, metodo: str, ruta: str, cuerpo=None):
         datos = json.dumps(cuerpo).encode() if cuerpo is not None else None
@@ -84,9 +87,10 @@ class Immich:
             raise ErrorImmich(f"{metodo} {ruta} → sin conexión: {e.reason}") from None
 
     # --- búsquedas -------------------------------------------------------------
-    def buscar_ids(self, filtro: dict) -> set[str]:
-        """Todos los ids de asset que cumplen el filtro (forma nueva de v3.2+, con cursor)."""
-        ids: set[str] = set()
+    def buscar(self, filtro: dict) -> dict[str, str]:
+        """{id de asset: id del dueño} de todo lo que cumple el filtro (forma nueva de
+        v3.2+, con cursor)."""
+        ids: dict[str, str] = {}
         cursor = None
         while True:
             cuerpo = {"filter": filtro, "size": PAGINA, "withExif": False}
@@ -95,20 +99,28 @@ class Immich:
             r = self._peticion("POST", "/api/search/metadata", cuerpo)
             assets = (r or {}).get("assets") or {}
             for a in assets.get("items", []):
-                ids.add(a["id"])
+                ids[a["id"]] = a.get("ownerId", "")
             cursor = assets.get("nextCursor")
             if not cursor:
                 return ids
 
     def assets_de_personas(self, personas: list[str], todas: bool) -> set[str]:
         clave = "all" if todas else "any"
-        return self.buscar_ids(
+        return set(self.buscar(
             {"personIds": {clave: personas}, "visibility": {"in": VISIBILIDADES}}
-        )
+        ))
 
-    def assets_del_album(self, album_id: str) -> set[str]:
+    def assets_del_album(self, album_id: str) -> dict[str, str]:
+        """{asset: dueño} del álbum. OJO: Immich (v3.3.5) devuelve las fotos de TODOS los
+        miembros del álbum, no solo las de la clave (comprobado el 2026-11-04)."""
         # Mismo filtro de visibilidad que en las personas, para comparar like con like.
-        return self.buscar_ids({"albumIds": {"any": [album_id]}, "visibility": {"in": VISIBILIDADES}})
+        return self.buscar({"albumIds": {"any": [album_id]}, "visibility": {"in": VISIBILIDADES}})
+
+    def yo(self) -> str:
+        """Id del usuario de la clave (GET /api/users/me, permiso user.read)."""
+        if self._yo is None:
+            self._yo = self._peticion("GET", "/api/users/me")["id"]
+        return self._yo
 
     # --- personas y álbumes ----------------------------------------------------
     def persona(self, persona_id: str) -> dict:
@@ -209,16 +221,21 @@ def validar_personas(api: Immich, nombre: str, personas_cfg: list[dict]) -> tupl
 
 
 def aplicar(api: Immich, album_id: str | None, modo: str, deseados: set[str], simular: bool) -> None:
-    """Deja en el álbum lo que pide `deseados`, mirando solo las fotos que esta clave ve
-    dentro del álbum (las suyas: la búsqueda por álbum de Immich se limita al usuario)."""
-    actuales = api.assets_del_album(album_id) if album_id else set()
-    faltan = sorted(deseados - actuales)
-    sobran = sorted(actuales - deseados) if modo == "espejo" else []
-    log(f"  personas: {len(deseados)} · álbum: {len(actuales)} · "
+    """Deja en el álbum lo que pide `deseados`. En espejo solo se quitan fotos cuyo dueño
+    es el usuario de la clave: las que han puesto otros miembros no se tocan nunca."""
+    actuales = api.assets_del_album(album_id) if album_id else {}
+    faltan = sorted(deseados - set(actuales))
+    propios: set[str] = set()
+    if modo == "espejo" and actuales:
+        yo = api.yo()  # antes de escribir nada: sin user.read, error y no se toca el álbum
+        propios = {a for a, dueno in actuales.items() if dueno == yo}
+    sobran = sorted(propios - deseados)
+    log(f"  personas: {len(deseados)} · álbum: {len(actuales)}"
+        f"{f' (propias: {len(propios)})' if modo == 'espejo' else ''} · "
         f"añadir: {len(faltan)} · quitar: {len(sobran)}")
 
-    if sobran and actuales and len(sobran) / len(actuales) > MAX_FRACCION_A_QUITAR:
-        log(f"  FRENO: quitar {len(sobran)} de {len(actuales)} supera el "
+    if sobran and len(sobran) / len(propios) > MAX_FRACCION_A_QUITAR:
+        log(f"  FRENO: quitar {len(sobran)} de {len(propios)} supera el "
             f"{MAX_FRACCION_A_QUITAR:.0%}; no se quita nada en esta pasada. Revisar.")
         sobran = []
 
