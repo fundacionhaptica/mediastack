@@ -49,7 +49,7 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
 - Estado en `/volume1/docker/mediastack-data/auto-albums/estado.json`.
 - **Fotos de Mari Herrero en «Nietos»** (pedido el 2026-11-04). El álbum ya está compartido
   con ella como **editora**. `config.json` lleva una entrada `otras_cuentas` para su cuenta,
-  en modo **añadir** (nunca quita nada suyo), **desactivada** (`"activo": false`) hasta que
+  en modo **añadir** (nunca quita nada suyo). Estuvo desactivada (`"activo": false`) hasta que
   haya clave. Sus personas no tienen nombre: los ids de Guillermo (22 fotos), Mía (64) e
   India (101) se sacaron comparando sus caras con las de Jaime (distancia coseno media
   0,34-0,38, frente a más de 0,58 con los otros dos niños). Un cuarto grupo de 5 fotos, que
@@ -57,7 +57,7 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
   1. En la cuenta de Mari: crear una clave con `person.read`, `asset.read`, `album.read` y
      `albumAsset.create`, y ponerla en `auto-albums/.env` como `IMMICH_API_KEY_MARI`.
      **Hecho el 2026-11-04**, aunque con una clave de permiso `all` (ver «Pendiente»).
-  2. Cambiar `"activo"` a `true` (por PR) y comprobar con `--simular`.
+  2. Cambiar `"activo"` a `true` (por PR) y comprobar con `--simular`. **Hecho el 2026-11-04.**
   3. Mari ya ha puesto nombre a las tres personas («Guillermo Ruiz», «Mia Magallon»,
      «India Magallon»), lo que confirma los ids. La simulación del 2026-11-04 daba 152
      fotos suyas por añadir.

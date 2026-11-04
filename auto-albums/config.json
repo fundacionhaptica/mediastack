@@ -68,7 +68,7 @@
         {
           "cuenta": "Mari Herrero",
           "clave_env": "IMMICH_API_KEY_MARI",
-          "activo": false,
+          "activo": true,
           "modo": "anadir",
           "personas": [
             {

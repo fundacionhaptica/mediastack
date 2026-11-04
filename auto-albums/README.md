@@ -66,7 +66,7 @@ el nombre de cada álbum con su id y el resultado de la última pasada.
 | Papá y Mamá | Jaime Ruiz Cañada **o** Mari Herrero | espejo |
 | Papá y Mamá juntos | Jaime Ruiz Cañada **y** Mari Herrero en la misma foto (`requiere_todas`) | espejo |
 | Nietos | Guillermo Ruiz España **o** Mía Magallon **o** India Magallon | espejo |
-| ↳ cuenta de Mari Herrero | sus fotos de los mismos tres | añadir · **desactivada** hasta tener su clave |
+| ↳ cuenta de Mari Herrero | sus fotos de los mismos tres | añadir (activa desde el 2026-11-04) |
 
 Hora: cada día a las **04:00** (Europe/Madrid), y una pasada al arrancar el contenedor.
 
