@@ -72,8 +72,8 @@ Navidrome importa en su escaneo. Escrito el 2026-10-24 directamente en el clon d
 subido al repo el 2026-11-04, sin cambios. El uso, con `docker run` de usar y tirar, está
 en la cabecera del script. Escribe en `/volume1/music/Playlists` (más `_faltan.txt` con lo
 que no encuentra) y lee una **copia** de la base de Navidrome. Conviene probar antes con
-`--dry-run`. Es la única excepción a la regla 6 (bibliotecas en solo lectura), y se lanza
-a mano.
+`--dry-run`. Ojo: monta `/volume1/music` con escritura, mientras que el stack la monta en
+solo lectura (regla 6). Es un script que se lanza a mano y no forma parte del stack.
 
 ## Lo que falta, en este orden
 
