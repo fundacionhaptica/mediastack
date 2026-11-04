@@ -65,6 +65,16 @@ tele LG con la app oficial de Jellyfin: Navidrome no tiene app para webOS. Falta
 Jellyfin la biblioteca **Música** (tipo *Música*, carpeta `/music`), con el usuario
 administrador. Navidrome sigue igual y comparte la misma carpeta.
 
+## Playlists de iTunes → Navidrome (`scripts/itunes-a-m3u.py`)
+
+Convierte las playlists de una biblioteca de iTunes exportada (`.xml`) en `.m3u` que
+Navidrome importa en su escaneo. Escrito el 2026-10-24 directamente en el clon del NAS y
+subido al repo el 2026-11-04, sin cambios. El uso, con `docker run` de usar y tirar, está
+en la cabecera del script. Escribe en `/volume1/music/Playlists` (más `_faltan.txt` con lo
+que no encuentra) y lee una **copia** de la base de Navidrome. Conviene probar antes con
+`--dry-run`. Es la única excepción a la regla 6 (bibliotecas en solo lectura), y se lanza
+a mano.
+
 ## Lo que falta, en este orden
 
 Guion paso a paso para hacerlo con Claude Cowork: **`COWORK.md`**.
