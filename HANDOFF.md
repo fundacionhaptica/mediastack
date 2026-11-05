@@ -72,7 +72,11 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
   Mari lleva `"duplicados": {"modo": "simular", "dias": 7}`: cada pasada apunta en el log
   qué copias descartaría, sin cambiar nada (reglas en `auto-albums/README.md`, «Copias de
   WhatsApp»). Prueba previa a mano: 7 de 142 con original de Jaime de los 3 días anteriores;
-  dos miradas a ojo, las dos la misma foto. **Siguiente paso:** tras unas noches, revisar las
+  dos miradas a ojo, las dos la misma foto. Primera simulación con el código nuevo
+  (2026-11-05, contra el Immich real, sin escribir): 152 fotos de Mari, 146 sin datos de
+  cámara, **6 copias** con original entre 0 y 114 h antes (dos de ellas, las miradas a ojo).
+  Una de las 6 tiene como "original" una copia de WhatsApp que está en la cuenta de Jaime:
+  sigue siendo la misma foto dos veces en el álbum. **Siguiente paso:** tras unas noches, revisar las
   parejas del log (`grep -E 'copia:|duplicados \['`) y, si cuadran, pasar a `"activo"` por PR.
   Antes, añadir `albumAsset.delete` a la clave de Mari si se cambia por una con permisos
   justos (la actual es `all`).
