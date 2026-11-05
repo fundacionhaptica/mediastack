@@ -15,6 +15,9 @@ Immich (v3.3) no tiene "álbumes automáticos por persona": sus Workflows saben 
   4. Con "otras_cuentas", repite 1-3 con la clave de otro usuario con quien el álbum está
      compartido como editor, para que entren también SUS fotos (Immich solo deja añadir
      a un álbum fotos propias).
+  5. Con "duplicados" en una de "otras_cuentas", no mete en el álbum las copias de WhatsApp
+     de fotos cuyo original ya está en el álbum (POST /api/search/smart con queryAssetId).
+     En "simular" solo lo apunta en el log.
 
 Sin dependencias: solo la biblioteca estándar de Python 3.10+.
 
@@ -41,13 +44,16 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 VISIBILIDADES = ["timeline", "archive"]  # nunca "locked" (carpeta bloqueada) ni "hidden"
 LOTE = 500                               # ids por petición de añadir/quitar
 PAGINA = 1000                            # máximo que admite la búsqueda
 MAX_FRACCION_A_QUITAR = 0.5              # freno de seguridad del modo espejo
+PARECIDAS = 10                           # resultados por búsqueda de fotos parecidas
+DIAS_DUPLICADO = 7                       # ventana por defecto: original hasta 7 días antes
+TOLERANCIA_H = 1                         # la copia puede ser hasta 1 h "anterior" (relojes)
 
 
 def log(msg: str) -> None:
@@ -87,28 +93,54 @@ class Immich:
             raise ErrorImmich(f"{metodo} {ruta} → sin conexión: {e.reason}") from None
 
     # --- búsquedas -------------------------------------------------------------
-    def buscar(self, filtro: dict) -> dict[str, str]:
-        """{id de asset: id del dueño} de todo lo que cumple el filtro (forma nueva de
-        v3.2+, con cursor)."""
-        ids: dict[str, str] = {}
+    def buscar_items(self, filtro: dict, con_exif: bool = False) -> dict[str, dict]:
+        """{id de asset: asset} de todo lo que cumple el filtro (forma nueva de v3.2+,
+        con cursor)."""
+        items: dict[str, dict] = {}
         cursor = None
         while True:
-            cuerpo = {"filter": filtro, "size": PAGINA, "withExif": False}
+            cuerpo = {"filter": filtro, "size": PAGINA, "withExif": con_exif}
             if cursor:
                 cuerpo["cursor"] = cursor
             r = self._peticion("POST", "/api/search/metadata", cuerpo)
             assets = (r or {}).get("assets") or {}
             for a in assets.get("items", []):
-                ids[a["id"]] = a.get("ownerId", "")
+                items[a["id"]] = a
             cursor = assets.get("nextCursor")
             if not cursor:
-                return ids
+                return items
+
+    def buscar(self, filtro: dict) -> dict[str, str]:
+        """{id de asset: id del dueño} de todo lo que cumple el filtro."""
+        return {i: a.get("ownerId", "") for i, a in self.buscar_items(filtro).items()}
+
+    @staticmethod
+    def _filtro_personas(personas: list[str], todas: bool) -> dict:
+        return {"personIds": {"all" if todas else "any": personas},
+                "visibility": {"in": VISIBILIDADES}}
 
     def assets_de_personas(self, personas: list[str], todas: bool) -> set[str]:
-        clave = "all" if todas else "any"
-        return set(self.buscar(
-            {"personIds": {clave: personas}, "visibility": {"in": VISIBILIDADES}}
-        ))
+        return set(self.buscar(self._filtro_personas(personas, todas)))
+
+    def assets_de_personas_con_exif(self, personas: list[str], todas: bool) -> dict[str, dict]:
+        return self.buscar_items(self._filtro_personas(personas, todas), con_exif=True)
+
+    def parecidas(self, asset_id: str, album_id: str) -> list[dict] | None:
+        """Assets del álbum ordenados de más a menos parecido a `asset_id` (búsqueda por
+        imagen de Immich, CLIP). Dentro de un álbum entran los de todos sus miembros
+        (comprobado en v3.3.5 el 2026-11-04). None si el asset aún no tiene huella (el ML
+        no lo ha procesado)."""
+        try:
+            r = self._peticion("POST", "/api/search/smart", {
+                "queryAssetId": asset_id,
+                "filter": {"albumIds": {"any": [album_id]}, "visibility": {"in": VISIBILIDADES}},
+                "size": PARECIDAS,
+            })
+        except ErrorImmich as e:
+            if "HTTP 400" in str(e) and "embedding" in str(e):
+                return None
+            raise
+        return ((r or {}).get("assets") or {}).get("items", [])
 
     def assets_del_album(self, album_id: str) -> dict[str, str]:
         """{asset: dueño} del álbum. OJO: Immich (v3.3.5) devuelve las fotos de TODOS los
@@ -220,18 +252,21 @@ def validar_personas(api: Immich, nombre: str, personas_cfg: list[dict]) -> tupl
     return ids, nombres
 
 
-def aplicar(api: Immich, album_id: str | None, modo: str, deseados: set[str], simular: bool) -> None:
+def aplicar(api: Immich, album_id: str | None, modo: str, deseados: set[str], simular: bool,
+            quitar: set[str] = frozenset(), mios: set[str] = frozenset()) -> None:
     """Deja en el álbum lo que pide `deseados`. En espejo solo se quitan fotos cuyo dueño
-    es el usuario de la clave: las que han puesto otros miembros no se tocan nunca."""
+    es el usuario de la clave: las que han puesto otros miembros no se tocan nunca.
+    `quitar` son fotos propias que hay que sacar también en modo "anadir" (copias
+    duplicadas); `mios`, fotos que se sabe que son de la clave sin preguntar a Immich."""
     actuales = api.assets_del_album(album_id) if album_id else {}
     faltan = sorted(deseados - set(actuales))
-    propios: set[str] = set()
+    propios: set[str] = set(mios) & set(actuales)
     if modo == "espejo" and actuales:
         yo = api.yo()  # antes de escribir nada: sin user.read, error y no se toca el álbum
         propios = {a for a, dueno in actuales.items() if dueno == yo}
-    sobran = sorted(propios - deseados)
+    sobran = sorted((propios - deseados) if modo == "espejo" else (propios & set(quitar)))
     log(f"  personas: {len(deseados)} · álbum: {len(actuales)}"
-        f"{f' (propias: {len(propios)})' if modo == 'espejo' else ''} · "
+        f"{f' (propias: {len(propios)})' if modo == 'espejo' or quitar else ''} · "
         f"añadir: {len(faltan)} · quitar: {len(sobran)}")
 
     if sobran and len(sobran) / len(propios) > MAX_FRACCION_A_QUITAR:
@@ -254,6 +289,71 @@ def aplicar(api: Immich, album_id: str | None, modo: str, deseados: set[str], si
 def comprobar_modo(nombre: str, modo: str) -> None:
     if modo not in ("anadir", "espejo"):
         raise ErrorImmich(f"«{nombre}»: modo «{modo}» no válido (anadir | espejo)")
+
+
+# --- copias de WhatsApp ----------------------------------------------------------
+def _fecha(asset: dict) -> datetime | None:
+    texto = asset.get("fileCreatedAt") or ""
+    try:
+        f = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return f if f.tzinfo else f.replace(tzinfo=timezone.utc)
+
+
+def sin_camara(asset: dict) -> bool:
+    """WhatsApp quita los datos de cámara: una foto sin marca ni modelo puede ser una copia.
+    Las que sí los tienen (hechas con su móvil) no se descartan nunca."""
+    exif = asset.get("exifInfo") or {}
+    return not (exif.get("make") or "").strip() and not (exif.get("model") or "").strip()
+
+
+def leer_cfg_duplicados(nombre: str, otra: dict) -> dict | None:
+    cfg = otra.get("duplicados")
+    if not cfg:
+        return None
+    modo = cfg.get("modo", "simular")
+    if modo == "no":
+        return None
+    if modo not in ("simular", "activo"):
+        raise ErrorImmich(f"«{nombre}»: duplicados.modo «{modo}» no válido (simular | activo | no)")
+    dias = cfg.get("dias", DIAS_DUPLICADO)
+    if not isinstance(dias, (int, float)) or isinstance(dias, bool) or not 0 < dias <= 60:
+        raise ErrorImmich(f"«{nombre}»: duplicados.dias tiene que ser un número mayor que 0 y como mucho 60")
+    return {"modo": modo, "dias": dias}
+
+
+def buscar_duplicados(api: Immich, album_id: str, candidatos: dict[str, dict],
+                      dueno_original: str, dias: float) -> tuple[dict[str, dict], int]:
+    """De `candidatos` (fotos de la otra cuenta), las que son copia de una foto del álbum
+    que es de `dueno_original`. Cuenta como copia si a la vez:
+      1. no tiene datos de cámara (lo que deja WhatsApp),
+      2. la foto MÁS parecida del álbum, sin contar ella misma, es de `dueno_original`,
+      3. y esa foto se hizo entre `dias` días antes y TOLERANCIA_H h después.
+    Devuelve ({copia: original}, cuántas no se pudieron mirar por no tener huella aún)."""
+    copias: dict[str, dict] = {}
+    sin_huella = 0
+    for aid, asset in sorted(candidatos.items()):
+        if not sin_camara(asset):
+            continue
+        recibida = _fecha(asset)
+        if recibida is None:
+            continue
+        hits = api.parecidas(aid, album_id)
+        if hits is None:
+            sin_huella += 1
+            continue
+        otros = [h for h in hits if h.get("id") != aid]
+        if not otros or otros[0].get("ownerId") != dueno_original:
+            continue
+        original = otros[0]
+        hecha = _fecha(original)
+        if hecha is None:
+            continue
+        horas = (recibida - hecha).total_seconds() / 3600
+        if -TOLERANCIA_H <= horas <= dias * 24:
+            copias[aid] = dict(original, _horas=horas)
+    return copias, sin_huella
 
 
 def sincronizar_album(api: Immich, cfg: dict, estado: dict, simular: bool) -> bool:
@@ -287,36 +387,64 @@ def sincronizar_album(api: Immich, cfg: dict, estado: dict, simular: bool) -> bo
         if otra.get("activo", True) is False:
             continue
         try:
-            sincronizar_otra_cuenta(api.url, nombre, album_id, otra, bool(cfg.get("requiere_todas")), simular)
+            sincronizar_otra_cuenta(api, nombre, album_id, otra, bool(cfg.get("requiere_todas")), simular)
         except (ErrorImmich, KeyError) as e:
             ok = False
             log(f"ERROR en «{nombre}», cuenta «{otra.get('cuenta', '?')}»: {e}")
     return ok
 
 
-def sincronizar_otra_cuenta(url: str, nombre: str, album_id: str | None, otra: dict,
+def sincronizar_otra_cuenta(principal: Immich, nombre: str, album_id: str | None, otra: dict,
                             todas: bool, simular: bool) -> None:
     """Añade al álbum (de la clave principal) las fotos de otra cuenta, con su propia clave.
     El álbum tiene que estar compartido con esa cuenta como editor. Por defecto en modo
-    "anadir": nunca quita nada."""
+    "anadir": nunca quita nada, salvo las copias duplicadas con "duplicados" en "activo"."""
     cuenta = otra["cuenta"]
     modo = otra.get("modo", "anadir")
     comprobar_modo(nombre, modo)
+    dup = leer_cfg_duplicados(f"{nombre}/{cuenta}", otra)
     clave = os.environ.get(otra["clave_env"], "").strip()
     if not clave:
         raise ErrorImmich(f"falta la variable {otra['clave_env']} en .env")
     if album_id is None:
         log(f"  [simulación] cuenta «{cuenta}»: el álbum aún no existe, se salta")
         return
-    api = Immich(url, clave)
+    api = Immich(principal.url, clave)
     if not api.album(album_id):
         raise ErrorImmich("esa cuenta no ve el álbum: compártelo con ella como editora")
     personas, nombres = validar_personas(api, f"{nombre}/{cuenta}", otra.get("personas", []))
     log(f"  cuenta «{cuenta}» [{modo}] ← {' + '.join(nombres)}")
-    deseados = api.assets_de_personas(personas, todas)
+    if dup is None:
+        deseados = api.assets_de_personas(personas, todas)
+        if not deseados and modo == "espejo":
+            raise ErrorImmich("la búsqueda no devuelve nada; no se toca el álbum")
+        aplicar(api, album_id, modo, deseados, simular)
+        return
+
+    items = api.assets_de_personas_con_exif(personas, todas)
+    deseados = set(items)
     if not deseados and modo == "espejo":
         raise ErrorImmich("la búsqueda no devuelve nada; no se toca el álbum")
-    aplicar(api, album_id, modo, deseados, simular)
+    # La búsqueda de parecidas la hace la clave de ESTA cuenta: la principal no puede usar
+    # de referencia una foto ajena que aún no está en el álbum (HTTP 400, comprobado el
+    # 2026-11-04), y dentro del álbum la de esta cuenta también ve los originales. Todo
+    # antes de escribir: si algo falla, no se toca el álbum.
+    copias, sin_huella = buscar_duplicados(api, album_id, items, principal.yo(), dup["dias"])
+    activo = dup["modo"] == "activo"
+    verbo = "se descarta" if activo else "[simulación duplicados] se descartaría"
+    for aid, orig in sorted(copias.items(), key=lambda x: x[1].get("fileCreatedAt", "")):
+        log(f"  copia: {verbo} {aid} ({items[aid].get('fileCreatedAt', '?')[:16]}) "
+            f"= {orig.get('originalFileName', '?')} {orig['id']} "
+            f"({orig.get('fileCreatedAt', '?')[:16]}, {orig['_horas']:.1f} h antes)")
+    mirados = sum(1 for a in items.values() if sin_camara(a))
+    log(f"  duplicados [{dup['modo']}, {dup['dias']} días]: {len(items)} fotos, "
+        f"{mirados} sin datos de cámara, {len(copias)} copias de fotos del álbum"
+        f"{f', {sin_huella} aún sin huella (entran)' if sin_huella else ''}")
+    if not activo:
+        aplicar(api, album_id, modo, deseados, simular)
+        return
+    aplicar(api, album_id, modo, deseados - set(copias), simular,
+            quitar=set(copias), mios=set(items))
 
 
 def pasada(api: Immich, config: dict, ruta_estado: Path, simular: bool) -> bool:

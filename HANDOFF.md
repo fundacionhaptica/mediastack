@@ -66,6 +66,20 @@ noche a las 04:00 deja cada álbum de `auto-albums/config.json` con las fotos de
   Aceptar **no hace falta** para el álbum. Si Mari acepta, sus caras nuevas pueden quedar
   bajo los ids de Jaime y al revés. Por eso cada lado lleva los ids del otro como
   `"opcional": true`.
+- **Copias de WhatsApp en «Nietos»** (pedido el 2026-11-04). Las 152 fotos de Mari en el
+  álbum son copias que le mandan Jaime o su mujer por WhatsApp (sin datos de cámara, fecha de
+  recepción, 1536×2048), y muchas ya están en el álbum como original de Jaime. La entrada de
+  Mari lleva `"duplicados": {"modo": "simular", "dias": 7}`: cada pasada apunta en el log
+  qué copias descartaría, sin cambiar nada (reglas en `auto-albums/README.md`, «Copias de
+  WhatsApp»). Prueba previa a mano: 7 de 142 con original de Jaime de los 3 días anteriores;
+  dos miradas a ojo, las dos la misma foto. Primera simulación con el código nuevo
+  (2026-11-05, contra el Immich real, sin escribir): 152 fotos de Mari, 146 sin datos de
+  cámara, **6 copias** con original entre 0 y 114 h antes (dos de ellas, las miradas a ojo).
+  Una de las 6 tiene como "original" una copia de WhatsApp que está en la cuenta de Jaime:
+  sigue siendo la misma foto dos veces en el álbum. **Siguiente paso:** tras unas noches, revisar las
+  parejas del log (`grep -E 'copia:|duplicados \['`) y, si cuadran, pasar a `"activo"` por PR.
+  Antes, añadir `albumAsset.delete` a la clave de Mari si se cambia por una con permisos
+  justos (la actual es `all`).
 
 ## Música en Jellyfin (2026-10-31)
 
@@ -194,6 +208,11 @@ Hecho eso, se quitan del repo los ficheros que solo servían al mini PC: `wsl/`,
   (`GET /api/users/me`, permiso `user.read`). Lección: **probar contra el Immich real
   antes de fiarse de una lectura del código**. Para añadir fotos de otro usuario sí hace
   falta su clave (`AssetShare`: solo fotos propias; esto sí se ha comprobado).
+- **"Fotos parecidas" (`POST /api/search/smart` con `queryAssetId`) exige poder leer la foto de
+  referencia**: la clave de Jaime da HTTP 400 con una foto de Mari que no está en un álbum
+  compartido; la de Mari sí puede, y con `albumIds` le salen también las de Jaime. La
+  respuesta no trae distancia, solo el orden. Una foto aún sin huella da HTTP 400
+  `has no embedding`. Todo comprobado en v3.3.5 el 2026-11-04.
 
 ## Comprobación
 
